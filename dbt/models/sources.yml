@@ -1,0 +1,13 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Raw tables loaded by ingest (Basketball-Reference scrape → DuckDB)
+    schema: raw
+    tables:
+      - name: games
+        description: One row per game; date, visitor/home, points. Standings derived from this.
+      - name: player_season_totals
+        description: Raw counting stats per player (per team if traded). Per-game derived in dbt.
+      - name: roster
+        description: One row per player-team-season (roster info).

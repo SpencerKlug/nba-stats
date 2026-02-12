@@ -1,0 +1,13 @@
+# Use from repo root: DBT_PROFILES_DIR=dbt dbt run
+# Or copy this to ~/.dbt/profiles.yml and set path to your warehouse.duckdb
+
+nba_warehouse:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      # Path relative to where you run dbt (run from repo root)
+      path: "warehouse.duckdb"
+    prod:
+      type: duckdb
+      path: "warehouse.duckdb"

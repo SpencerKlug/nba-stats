@@ -1,0 +1,25 @@
+# dbt project for NBA warehouse (DuckDB)
+# Run from repo root: DBT_PROFILES_DIR=dbt dbt run
+
+name: "nba_warehouse"
+version: "1.0.0"
+config-version: 2
+profile: "nba_warehouse"
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+vars:
+  season: "2026"
+
+models:
+  nba_warehouse:
+    staging:
+      +schema: staging
+    marts:
+      +schema: marts

@@ -1,15 +1,16 @@
--- Roster: one row per player-team-season.
+-- Team roster rows from commonteamroster
 select
-    coalesce(no_, no) as jersey_no,
+    num as jersey_no,
     player,
-    pos,
-    ht as height,
-    wt as weight,
+    position as pos,
+    height,
+    weight,
     birth_date,
-    birth_exp as birth_country,
     exp as experience,
-    college,
-    team_abbrev,
-    season
-from {{ source("raw", "roster") }}
+    school as college,
+    team_id,
+    team_abbreviation as team_abbrev,
+    season,
+    season_label
+from {{ source("raw", "team_rosters") }}
 where player is not null

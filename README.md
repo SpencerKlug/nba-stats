@@ -1,12 +1,12 @@
 # NBA Stats: Scrape → DuckDB → dbt
 
-Raw NBA data from [Basketball-Reference](https://www.basketball-reference.com/) is scraped into a **DuckDB** warehouse (with optional **AWS S3**), then transformed in **dbt**. No pre-aggregated stats are stored—standings and per-game stats are derived in dbt from raw games and player totals.
+Raw NBA data from the `stats.nba.com` API is ingested into a **DuckDB** warehouse (with optional **AWS S3**), then transformed in **dbt**. No pre-aggregated marts are stored in ingest; standings and per-game stats are built in dbt from raw game logs.
 
 ## Architecture
 
-- **Ingest**: Python scrapes raw tables (games, player season totals, rosters) and loads them into DuckDB. Optionally exports to S3 as Parquet.
+- **Ingest**: Python pulls raw API tables (`leaguegamelog`, `commonteamroster`) and loads them into DuckDB. Optionally exports to S3 as Parquet.
 - **Warehouse**: DuckDB (local `warehouse.duckdb` or query over S3).
-- **dbt**: Staging models clean raw data; marts build standings (from game results) and player per-game stats (from season totals).
+- **dbt**: Staging models clean raw data; marts build standings (from team game logs) and player per-game stats (from player game logs).
 
 ## Setup
 
@@ -36,9 +36,9 @@ python -m ingest.load_warehouse --season 2026 --s3-bucket your-bucket --s3-prefi
 
 Ingest writes three raw tables under the `raw` schema:
 
-- **games** – one row per game (date, visitor, home, points, etc.); all months of the season are fetched and concatenated.
-- **player_season_totals** – raw counting stats per player (G, MP, FG, FGA, PTS, …); one row per player per team if traded.
-- **roster** – one row per player–team–season (all 30 teams).
+- **team_game_logs** – one row per team per game (`leaguegamelog`, `PlayerOrTeam=T`).
+- **player_game_logs** – one row per player per game (`leaguegamelog`, `PlayerOrTeam=P`).
+- **team_rosters** – one row per player-team-season (`commonteamroster`).
 
 ### 3. dbt (transformations)
 
@@ -60,10 +60,10 @@ By default, the profile uses `path: warehouse.duckdb` (relative to the current w
 
 **Models:**
 
-- **Staging**: `stg_games`, `stg_player_totals`, `stg_roster` – light cleanup and column renames from `raw`.
+- **Staging**: `stg_games`, `stg_player_totals`, `stg_roster` – cleanup and column alignment from raw API tables.
 - **Marts**:
-  - **standings** – conference standings (W, L, W/L%, GB) derived from game results only.
-  - **player_per_game** – per-game stats (PPG, RPG, APG, …) derived from raw season totals (e.g. PTS/G).
+  - **standings** – conference standings (W, L, W/L%, GB) derived from `team_game_logs` only.
+  - **player_per_game** – per-game stats (PPG, RPG, APG, …) derived from `player_game_logs`.
 
 ### 4. Querying DuckDB
 
@@ -86,15 +86,15 @@ SELECT * FROM marts.player_per_game WHERE season = '2026' ORDER BY pts DESC LIMI
 
 ```
 nba-stats/
-├── basketball_reference.py   # Scraper (raw tables only used by ingest)
+├── main.py                  # optional playground for API calls
 ├── ingest/
-│   └── load_warehouse.py      # Scrape → DuckDB (+ optional S3)
+│   └── load_warehouse.py      # stats.nba.com API -> DuckDB (+ optional S3)
 ├── dbt/
 │   ├── dbt_project.yml
 │   ├── profiles.yml          # DuckDB path; use DBT_PROFILES_DIR=dbt
 │   ├── packages.yml
 │   └── models/
-│       ├── sources.yml       # raw.games, raw.player_season_totals, raw.roster
+│       ├── sources.yml       # raw.team_game_logs, raw.player_game_logs, raw.team_rosters
 │       ├── staging/
 │       └── marts/
 ├── warehouse.duckdb          # Created by ingest (path configurable)
@@ -103,5 +103,5 @@ nba-stats/
 
 ## Notes
 
-- Be polite when scraping: the ingest uses a short delay between requests.
-- Raw data only: no standings or per-game tables are scraped; those are built in dbt from games and player totals.
+- Ingest uses conservative headers + backoff for `stats.nba.com`.
+- Raw data only: standings and per-game views are built in dbt from raw logs.

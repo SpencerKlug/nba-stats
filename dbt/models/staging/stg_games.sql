@@ -1,15 +1,22 @@
--- Raw games: one row per game. Light cleanup for marts.
--- Columns from Basketball-Reference schedule: Date, Start (ET), Visitor/Neutral, PTS, Home/Neutral, PTS, Attend., Notes
+-- Team game logs from stats.nba.com (one row per team per game)
 select
-    date,
-    start_et,
-    visitor_neutral as visitor,
-    pts as visitor_pts,
-    home_neutral as home,
-    pts_1 as home_pts,
-    attend as attendance,
-    notes,
-    season
-from {{ source("raw", "games") }}
-where date is not null
-  and trim(cast(date as varchar)) != ''
+    game_id,
+    game_date,
+    season,
+    season_label,
+    season_type,
+    team_id,
+    team_abbreviation as team,
+    team_name,
+    matchup,
+    wl,
+    min,
+    pts,
+    reb,
+    ast,
+    stl,
+    blk,
+    tov,
+    plus_minus
+from {{ source("raw", "team_game_logs") }}
+where game_id is not null

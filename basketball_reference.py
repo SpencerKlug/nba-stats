@@ -8,6 +8,9 @@ Data is for personal/educational use; see site terms of service.
 from __future__ import annotations
 
 import io
+import logging
+import os
+import random
 import time
 
 import pandas as pd
@@ -15,12 +18,40 @@ import requests
 from bs4 import BeautifulSoup, Comment
 
 BASE_URL = "https://www.basketball-reference.com"
+log = logging.getLogger(__name__)
 
 # All 30 NBA team abbreviations (for full roster scrape)
 NBA_TEAM_ABBREVS = [
-    "ATL", "BOS", "BRK", "CHO", "CHI", "CLE", "DAL", "DEN", "DET", "GSW",
-    "HOU", "IND", "LAC", "LAL", "MEM", "MIA", "MIL", "MIN", "NOP", "NYK",
-    "OKC", "ORL", "PHI", "PHO", "POR", "SAC", "SAS", "TOR", "UTA", "WAS",
+    "ATL",
+    "BOS",
+    "BRK",
+    "CHO",
+    "CHI",
+    "CLE",
+    "DAL",
+    "DEN",
+    "DET",
+    "GSW",
+    "HOU",
+    "IND",
+    "LAC",
+    "LAL",
+    "MEM",
+    "MIA",
+    "MIL",
+    "MIN",
+    "NOP",
+    "NYK",
+    "OKC",
+    "ORL",
+    "PHI",
+    "PHO",
+    "POR",
+    "SAC",
+    "SAS",
+    "TOR",
+    "UTA",
+    "WAS",
 ]
 
 # Polite headers so the server doesn't reject the request
@@ -34,22 +65,107 @@ HEADERS = {
     "Referer": BASE_URL + "/",
 }
 
+# Retry with exponential backoff on rate limit / server errors
+RETRY_STATUS_CODES = (429, 500, 502, 503, 504)
+MAX_RETRIES = int(os.getenv("BBREF_MAX_RETRIES", "8"))
+DEFAULT_REQUEST_DELAY_SECONDS = float(os.getenv("BBREF_REQUEST_DELAY_SECONDS", "2.0"))
+BACKOFF_INITIAL_SECONDS = float(os.getenv("BBREF_BACKOFF_INITIAL_SECONDS", "2.0"))
+BACKOFF_MAX_SECONDS = float(os.getenv("BBREF_BACKOFF_MAX_SECONDS", "120.0"))
+REQUEST_JITTER_SECONDS = float(os.getenv("BBREF_REQUEST_JITTER_SECONDS", "1.0"))
+WARMUP_DELAY_SECONDS = float(os.getenv("BBREF_WARMUP_DELAY_SECONDS", "1.0"))
 
-def get_page(url: str, delay_seconds: float = 1.0) -> requests.Response:
+_SESSION = requests.Session()
+_SESSION.headers.update(HEADERS)
+_WARMED_UP = False
+
+
+def _retry_wait_seconds(attempt: int, resp: requests.Response | None = None) -> float:
+    """Compute retry wait using exponential backoff + jitter (+ Retry-After if provided)."""
+    backoff = min(
+        BACKOFF_INITIAL_SECONDS * (2**attempt) + random.uniform(0, 1),
+        BACKOFF_MAX_SECONDS,
+    )
+    if resp is None:
+        return backoff
+
+    retry_after = resp.headers.get("Retry-After")
+    if retry_after:
+        try:
+            retry_after_seconds = float(retry_after)
+            # Respect server guidance when present.
+            return min(max(retry_after_seconds, backoff), BACKOFF_MAX_SECONDS)
+        except ValueError:
+            # If Retry-After is an HTTP date or invalid, fall back to exponential value.
+            pass
+    return backoff
+
+
+def _warmup_session() -> None:
     """
-    Fetch a Basketball-Reference page with polite headers and optional delay.
+    Prime cookies/session state with a lightweight request to the home page.
+    This avoids sending the first data request as a completely cold client.
+    """
+    global _WARMED_UP
+    if _WARMED_UP:
+        return
+    try:
+        log.info("Warming up session with %s", BASE_URL)
+        _SESSION.get(BASE_URL + "/", timeout=15)
+        time.sleep(WARMUP_DELAY_SECONDS)
+    except requests.RequestException as e:
+        # Warmup is best-effort; continue to primary request flow.
+        log.debug("Warmup request failed: %s", e)
+    _WARMED_UP = True
+
+
+def get_page(url: str, delay_seconds: float | None = None) -> requests.Response:
+    """
+    Fetch a Basketball-Reference page with polite headers, optional delay,
+    and retry with exponential backoff on 429 / 5xx.
 
     Args:
         url: Full URL or path (e.g. /leagues/NBA_2025_standings.html).
-        delay_seconds: Seconds to wait after the request (rate limiting).
+        delay_seconds: Seconds to wait before the first request. If None, uses
+            BBREF_REQUEST_DELAY_SECONDS (default 2.0).
 
     Returns:
         Response object. Check response.ok before parsing.
     """
     if not url.startswith("http"):
         url = BASE_URL + url
-    time.sleep(delay_seconds)
-    return requests.get(url, headers=HEADERS, timeout=15)
+    _warmup_session()
+    base_delay = (
+        DEFAULT_REQUEST_DELAY_SECONDS if delay_seconds is None else delay_seconds
+    )
+    time.sleep(base_delay + random.uniform(0, REQUEST_JITTER_SECONDS))
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            log.info("GET %s (attempt %d/%d)", url, attempt + 1, MAX_RETRIES + 1)
+            resp = _SESSION.get(url, timeout=15)
+            if resp.status_code in RETRY_STATUS_CODES:
+                if attempt < MAX_RETRIES:
+                    wait = _retry_wait_seconds(attempt, resp)
+                    log.warning(
+                        "Retryable status %s for %s; sleeping %.1fs before retry",
+                        resp.status_code,
+                        url,
+                        wait,
+                    )
+                    time.sleep(wait)
+                    continue
+                resp.raise_for_status()
+            return resp
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+            if attempt < MAX_RETRIES:
+                wait = _retry_wait_seconds(attempt)
+                log.warning(
+                    "Connection/timeout for %s; sleeping %.1fs before retry",
+                    url,
+                    wait,
+                )
+                time.sleep(wait)
+                continue
+            raise
 
 
 def _parse_table_from_comment(

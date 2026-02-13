@@ -252,30 +252,93 @@ def load_all_raw(season: str, season_type: str = "Regular Season") -> dict[str, 
     return tables
 
 
-def write_duckdb(tables: dict[str, pd.DataFrame], db_path: str) -> None:
-    """Write raw tables to DuckDB (replace if exists for idempotency)."""
+def init_duckdb(db_path: str) -> duckdb.DuckDBPyConnection:
+    """Initialize DuckDB connection and ensure raw schema exists."""
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    log.info("Writing to DuckDB: %s", path)
+    log.info("Opening DuckDB: %s", path)
     con = duckdb.connect(str(path))
     con.execute("CREATE SCHEMA IF NOT EXISTS raw")
+    return con
 
-    for name, df in tables.items():
-        if df.empty:
-            log.debug("Skipping empty table: %s", name)
-            continue
-        con.execute(f"DROP TABLE IF EXISTS raw.{name}")
 
-    for name, df in tables.items():
-        if df.empty:
-            continue
+def table_exists(con: duckdb.DuckDBPyConnection, schema: str, table: str) -> bool:
+    cnt = con.execute(
+        """
+        SELECT count(*)
+        FROM information_schema.tables
+        WHERE table_schema = ? AND table_name = ?
+        """,
+        [schema, table],
+    ).fetchone()[0]
+    return cnt > 0
+
+
+def align_df_to_existing_columns(df: pd.DataFrame, existing_cols: list[str]) -> pd.DataFrame:
+    """
+    Align incoming DataFrame to existing table columns.
+    - Add missing columns as NULL
+    - Drop extra columns (log warning)
+    """
+    out = df.copy()
+    for c in existing_cols:
+        if c not in out.columns:
+            out[c] = None
+    extra = [c for c in out.columns if c not in existing_cols]
+    if extra:
+        log.warning("Dropping %d new/unexpected columns: %s", len(extra), ", ".join(extra))
+    return out[existing_cols]
+
+
+def upsert_raw_table(
+    con: duckdb.DuckDBPyConnection,
+    table_name: str,
+    df: pd.DataFrame,
+    season: str,
+    season_type: str,
+) -> None:
+    """Create/append table with season-level idempotent overwrite."""
+    if df.empty:
+        log.debug("Skipping empty table: %s", table_name)
+        return
+
+    fq_table = f"raw.{table_name}"
+    if not table_exists(con, "raw", table_name):
         con.register("_df", df)
-        con.execute(f"CREATE TABLE raw.{name} AS SELECT * FROM _df")
+        con.execute(f"CREATE TABLE {fq_table} AS SELECT * FROM _df")
         con.unregister("_df")
-        log.info("  raw.%s: %d rows", name, len(df))
+        log.info("  created %s: %d rows", fq_table, len(df))
+        return
 
-    con.close()
-    log.info("DuckDB write complete")
+    existing_cols = [row[0] for row in con.execute(f"DESCRIBE {fq_table}").fetchall()]
+    aligned = align_df_to_existing_columns(df, existing_cols)
+    con.register("_df", aligned)
+
+    # Idempotent season-level overwrite for reruns/backfills.
+    if "season" in existing_cols and "season_type" in existing_cols:
+        con.execute(
+            f"DELETE FROM {fq_table} WHERE season = ? AND season_type = ?",
+            [season, season_type],
+        )
+    elif "season" in existing_cols:
+        con.execute(f"DELETE FROM {fq_table} WHERE season = ?", [season])
+
+    cols_sql = ", ".join([f'"{c}"' for c in existing_cols])
+    con.execute(f"INSERT INTO {fq_table} ({cols_sql}) SELECT {cols_sql} FROM _df")
+    con.unregister("_df")
+    log.info("  upserted %s: %d rows", fq_table, len(aligned))
+
+
+def write_duckdb_for_season(
+    con: duckdb.DuckDBPyConnection,
+    tables: dict[str, pd.DataFrame],
+    season: str,
+    season_type: str,
+) -> None:
+    """Write one season's data into DuckDB with upsert behavior."""
+    log.info("Writing season=%s season_type=%s to DuckDB", season, season_type)
+    for name, df in tables.items():
+        upsert_raw_table(con, name, df, season=season, season_type=season_type)
 
 
 def export_to_s3(db_path: str, bucket: str, prefix: str) -> None:
@@ -295,9 +358,40 @@ def export_to_s3(db_path: str, bucket: str, prefix: str) -> None:
     log.info("S3 export complete")
 
 
+def resolve_seasons(
+    season: str,
+    start_season: str | None,
+    end_season: str | None,
+) -> list[str]:
+    """
+    Resolve season inputs to a sorted inclusive list of season years.
+    Examples:
+      season=2026 -> ['2026']
+      start=1997 end=2026 -> ['1997', ..., '2026']
+    """
+    if start_season is None and end_season is None:
+        return [str(int(season))]
+
+    start = int(start_season or season)
+    end = int(end_season or season)
+    if start > end:
+        raise ValueError(f"start-season ({start}) must be <= end-season ({end})")
+    return [str(y) for y in range(start, end + 1)]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Load raw NBA data into DuckDB (+ optional S3)")
     parser.add_argument("--season", default="2026", help="Season year (e.g. 2026 for 2025-26)")
+    parser.add_argument(
+        "--start-season",
+        default=None,
+        help="Backfill start season year (e.g. 1997). Use with --end-season.",
+    )
+    parser.add_argument(
+        "--end-season",
+        default=None,
+        help="Backfill end season year (e.g. 2026). Use with --start-season.",
+    )
     parser.add_argument(
         "--season-type",
         default="Regular Season",
@@ -324,9 +418,24 @@ def main() -> int:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    log.info("Starting ingest for season=%s season_type=%s", args.season, args.season_type)
-    tables = load_all_raw(season=args.season, season_type=args.season_type)
-    write_duckdb(tables, args.db)
+    seasons = resolve_seasons(args.season, args.start_season, args.end_season)
+    log.info(
+        "Starting ingest for %d season(s): %s -> %s (season_type=%s)",
+        len(seasons),
+        seasons[0],
+        seasons[-1],
+        args.season_type,
+    )
+
+    con = init_duckdb(args.db)
+    try:
+        for i, season in enumerate(seasons, 1):
+            log.info("=== Season %s (%d/%d) ===", season, i, len(seasons))
+            tables = load_all_raw(season=season, season_type=args.season_type)
+            write_duckdb_for_season(con, tables, season=season, season_type=args.season_type)
+    finally:
+        con.close()
+        log.info("DuckDB connection closed")
 
     if args.s3_bucket:
         export_to_s3(args.db, args.s3_bucket, args.s3_prefix)

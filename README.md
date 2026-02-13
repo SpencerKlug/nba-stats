@@ -34,6 +34,15 @@ export AWS_SECRET_ACCESS_KEY=...
 python -m ingest.load_warehouse --season 2026 --s3-bucket your-bucket --s3-prefix nba/raw
 ```
 
+Backfill a season range (inclusive):
+
+```bash
+# Example: 1997 through 2026
+python -m ingest.load_warehouse --start-season 1997 --end-season 2026 --season-type "Regular Season"
+```
+
+Backfill behavior is season-idempotent: rerunning the same season range overwrites that season's rows and keeps other seasons intact.
+
 Ingest writes three raw tables under the `raw` schema:
 
 - **team_game_logs** – one row per team per game (`leaguegamelog`, `PlayerOrTeam=T`).
@@ -105,3 +114,4 @@ nba-stats/
 
 - Ingest uses conservative headers + backoff for `stats.nba.com`.
 - Raw data only: standings and per-game views are built in dbt from raw logs.
+- Close DuckDB clients (e.g., DBeaver) before ingest writes to the same `.duckdb` file, or write to a different `--db` path.

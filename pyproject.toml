@@ -1,0 +1,38 @@
+[project]
+name = "nba-stats"
+version = "0.1.0"
+description = "NBA stats ingest (stats.nba.com) → DuckDB → dbt"
+readme = "README.md"
+requires-python = ">=3.10"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["."]
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "dbt_packages",
+    "target",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false

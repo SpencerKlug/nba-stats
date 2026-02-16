@@ -54,13 +54,28 @@ _SESSION.headers.update(STATS_HEADERS)
 
 
 def to_snake_case(s: str) -> str:
+    """Convert a string to snake_case (e.g. 'W/L%' -> 'w_l_pct').
+
+    Args:
+        s (str): Input string to normalize.
+
+    Returns:
+        str: Snake_case string.
+    """
     s = re.sub(r"[^\w\s]", " ", s)
     s = re.sub(r"\s+", "_", s.strip()).lower()
     return s or "unknown"
 
 
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize DataFrame columns to snake_case; dedupe with _1, _2 suffix."""
+    """Normalize DataFrame columns to snake_case; dedupe with _1, _2 suffix.
+
+    Args:
+        df (pd.DataFrame): DataFrame whose columns to normalize.
+
+    Returns:
+        pd.DataFrame: DataFrame with normalized column names.
+    """
     df = df.copy()
     base = [to_snake_case(str(c)) for c in df.columns]
     seen: dict[str, int] = {}
@@ -77,13 +92,29 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def season_to_label(season: str) -> str:
-    """Convert season year to NBA API label. 2026 -> 2025-26"""
+    """Convert season year to NBA API label (e.g. 2026 -> 2025-26).
+
+    Args:
+        season (str): Season year (e.g. 2026 for 2025-26).
+
+    Returns:
+        str: NBA API season label (e.g. 2025-26).
+    """
     y = int(season)
-    return f"{y-1}-{str(y)[-2:]}"
+    return f"{y - 1}-{str(y)[-2:]}"
 
 
 def _retry_wait_seconds(attempt: int, resp: requests.Response | None = None) -> float:
-    backoff = min(BACKOFF_INITIAL_SECONDS * (2 ** attempt), BACKOFF_MAX_SECONDS)
+    """Compute retry wait time (exponential backoff, optional Retry-After header).
+
+    Args:
+        attempt (int): Current attempt index (0-based).
+        resp (requests.Response | None, optional): Response from failed request (for Retry-After). Defaults to None.
+
+    Returns:
+        float: Seconds to wait before retry.
+    """
+    backoff = min(BACKOFF_INITIAL_SECONDS * (2**attempt), BACKOFF_MAX_SECONDS)
     if resp is not None:
         retry_after = resp.headers.get("Retry-After")
         if retry_after:
@@ -95,7 +126,15 @@ def _retry_wait_seconds(attempt: int, resp: requests.Response | None = None) -> 
 
 
 def call_stats_api(endpoint: str, params: dict[str, str]) -> dict:
-    """Call a stats.nba.com endpoint with retries/backoff."""
+    """Call a stats.nba.com endpoint with retries and exponential backoff.
+
+    Args:
+        endpoint (str): API endpoint path (e.g. leaguegamelog).
+        params (dict[str, str]): Query parameters for the request.
+
+    Returns:
+        dict: JSON response body.
+    """
     url = f"{STATS_BASE_URL}/{endpoint}"
     time.sleep(REQUEST_DELAY_SECONDS)
     for attempt in range(MAX_RETRIES + 1):
@@ -104,7 +143,12 @@ def call_stats_api(endpoint: str, params: dict[str, str]) -> dict:
         if resp.status_code in RETRY_STATUS_CODES:
             if attempt < MAX_RETRIES:
                 wait = _retry_wait_seconds(attempt, resp)
-                log.warning("status=%s endpoint=%s retrying in %.1fs", resp.status_code, endpoint, wait)
+                log.warning(
+                    "status=%s endpoint=%s retrying in %.1fs",
+                    resp.status_code,
+                    endpoint,
+                    wait,
+                )
                 time.sleep(wait)
                 continue
             resp.raise_for_status()
@@ -114,7 +158,16 @@ def call_stats_api(endpoint: str, params: dict[str, str]) -> dict:
 
 
 def resultset_to_df(payload: dict, name: str | None = None, index: int = 0) -> pd.DataFrame:
-    """Parse NBA stats resultSet(s) JSON to DataFrame."""
+    """Parse NBA stats API resultSet(s) JSON into a DataFrame.
+
+    Args:
+        payload (dict): API response JSON.
+        name (str | None, optional): Result set name to select. Defaults to None.
+        index (int, optional): Index of result set when name not used. Defaults to 0.
+
+    Returns:
+        pd.DataFrame: Parsed table; empty if no matching result set.
+    """
     if "resultSets" in payload:
         sets = payload["resultSets"]
         if isinstance(sets, dict):
@@ -136,6 +189,15 @@ def resultset_to_df(payload: dict, name: str | None = None, index: int = 0) -> p
 
 
 def load_team_game_logs(season: str, season_type: str = "Regular Season") -> pd.DataFrame:
+    """Load team game logs from stats.nba.com API.
+
+    Args:
+        season (str): Season year (e.g. 2026 for 2025-26)
+        season_type (str, optional): NBA API season type. Defaults to "Regular Season".
+
+    Returns:
+        pd.DataFrame: Team game logs DataFrame
+    """
     season_label = season_to_label(season)
     log.info("Loading team game logs season=%s (%s)", season_label, season_type)
     payload = call_stats_api(
@@ -163,6 +225,15 @@ def load_team_game_logs(season: str, season_type: str = "Regular Season") -> pd.
 
 
 def load_player_game_logs(season: str, season_type: str = "Regular Season") -> pd.DataFrame:
+    """Load player game logs from stats.nba.com API.
+
+    Args:
+        season (str): Season year (e.g. 2026 for 2025-26).
+        season_type (str, optional): NBA API season type. Defaults to "Regular Season".
+
+    Returns:
+        pd.DataFrame: Player game logs DataFrame.
+    """
     season_label = season_to_label(season)
     log.info("Loading player game logs season=%s (%s)", season_label, season_type)
     payload = call_stats_api(
@@ -190,7 +261,15 @@ def load_player_game_logs(season: str, season_type: str = "Regular Season") -> p
 
 
 def load_team_rosters(season: str, team_game_logs: pd.DataFrame) -> pd.DataFrame:
-    """Load commonteamroster for each team id observed in team_game_logs."""
+    """Load commonteamroster for each team id observed in team game logs.
+
+    Args:
+        season (str): Season year (e.g. 2026 for 2025-26).
+        team_game_logs (pd.DataFrame): Team game logs used to derive team IDs.
+
+    Returns:
+        pd.DataFrame: Roster rows (one per player-team-season); empty if no teams.
+    """
     if team_game_logs.empty or "team_id" not in team_game_logs.columns:
         log.warning("Cannot load rosters: team_game_logs empty or missing team_id")
         return pd.DataFrame()
@@ -222,7 +301,14 @@ def load_team_rosters(season: str, team_game_logs: pd.DataFrame) -> pd.DataFrame
         df["season"] = season
         df["season_label"] = season_label
         frames.append(df)
-        log.info("  %s (%s): %d players (%d/%d)", team_abbrev, team_id, len(df), i, len(teams))
+        log.info(
+            "  %s (%s): %d players (%d/%d)",
+            team_abbrev,
+            team_id,
+            len(df),
+            i,
+            len(teams),
+        )
 
     if not frames:
         return pd.DataFrame()
@@ -232,7 +318,15 @@ def load_team_rosters(season: str, team_game_logs: pd.DataFrame) -> pd.DataFrame
 
 
 def load_all_raw(season: str, season_type: str = "Regular Season") -> dict[str, pd.DataFrame]:
-    """Fetch all raw tables from NBA stats API."""
+    """Fetch all raw tables (team logs, player logs, rosters) from NBA stats API.
+
+    Args:
+        season (str): Season year (e.g. 2026 for 2025-26).
+        season_type (str, optional): NBA API season type. Defaults to "Regular Season".
+
+    Returns:
+        dict[str, pd.DataFrame]: Keys team_game_logs, player_game_logs, team_rosters.
+    """
     log.info("Fetching raw NBA stats data for season=%s season_type=%s", season, season_type)
     team_logs = load_team_game_logs(season=season, season_type=season_type)
     player_logs = load_player_game_logs(season=season, season_type=season_type)
@@ -253,7 +347,14 @@ def load_all_raw(season: str, season_type: str = "Regular Season") -> dict[str, 
 
 
 def init_duckdb(db_path: str) -> duckdb.DuckDBPyConnection:
-    """Initialize DuckDB connection and ensure raw schema exists."""
+    """Initialize DuckDB connection and ensure raw schema exists.
+
+    Args:
+        db_path (str): Path to DuckDB file.
+
+    Returns:
+        duckdb.DuckDBPyConnection: Open connection.
+    """
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     log.info("Opening DuckDB: %s", path)
@@ -263,6 +364,16 @@ def init_duckdb(db_path: str) -> duckdb.DuckDBPyConnection:
 
 
 def table_exists(con: duckdb.DuckDBPyConnection, schema: str, table: str) -> bool:
+    """Check whether a table exists in the given schema.
+
+    Args:
+        con (duckdb.DuckDBPyConnection): DuckDB connection.
+        schema (str): Schema name.
+        table (str): Table name.
+
+    Returns:
+        bool: True if the table exists.
+    """
     cnt = con.execute(
         """
         SELECT count(*)
@@ -275,10 +386,14 @@ def table_exists(con: duckdb.DuckDBPyConnection, schema: str, table: str) -> boo
 
 
 def align_df_to_existing_columns(df: pd.DataFrame, existing_cols: list[str]) -> pd.DataFrame:
-    """
-    Align incoming DataFrame to existing table columns.
-    - Add missing columns as NULL
-    - Drop extra columns (log warning)
+    """Align incoming DataFrame to existing table columns (add NULLs, drop extras).
+
+    Args:
+        df (pd.DataFrame): Incoming DataFrame.
+        existing_cols (list[str]): Column names of the existing table.
+
+    Returns:
+        pd.DataFrame: DataFrame with only existing_cols, missing cols as NULL.
     """
     out = df.copy()
     for c in existing_cols:
@@ -297,7 +412,18 @@ def upsert_raw_table(
     season: str,
     season_type: str,
 ) -> None:
-    """Create/append table with season-level idempotent overwrite."""
+    """Create table or upsert season-level rows (idempotent for backfill reruns).
+
+    Args:
+        con (duckdb.DuckDBPyConnection): DuckDB connection.
+        table_name (str): Raw table name (e.g. team_game_logs).
+        df (pd.DataFrame): Data to write.
+        season (str): Season year (e.g. 2026).
+        season_type (str): NBA API season type (e.g. Regular Season).
+
+    Returns:
+        None
+    """
     if df.empty:
         log.debug("Skipping empty table: %s", table_name)
         return
@@ -335,14 +461,33 @@ def write_duckdb_for_season(
     season: str,
     season_type: str,
 ) -> None:
-    """Write one season's data into DuckDB with upsert behavior."""
+    """Write one season's raw tables into DuckDB (upsert per table).
+
+    Args:
+        con (duckdb.DuckDBPyConnection): DuckDB connection.
+        tables (dict[str, pd.DataFrame]): Raw tables (team_game_logs, player_game_logs, team_rosters).
+        season (str): Season year (e.g. 2026).
+        season_type (str): NBA API season type.
+
+    Returns:
+        None
+    """
     log.info("Writing season=%s season_type=%s to DuckDB", season, season_type)
     for name, df in tables.items():
         upsert_raw_table(con, name, df, season=season, season_type=season_type)
 
 
 def export_to_s3(db_path: str, bucket: str, prefix: str) -> None:
-    """Export raw tables from DuckDB to S3 as Parquet (requires httpfs)."""
+    """Export raw schema tables from DuckDB to S3 as Parquet (requires httpfs).
+
+    Args:
+        db_path (str): Path to DuckDB file.
+        bucket (str): S3 bucket name.
+        prefix (str): S3 key prefix (e.g. nba).
+
+    Returns:
+        None
+    """
     log.info("Exporting to S3 (bucket=%s, prefix=%s)...", bucket, prefix)
     con = duckdb.connect(str(db_path))
     con.execute("INSTALL httpfs; LOAD httpfs;")
@@ -363,11 +508,15 @@ def resolve_seasons(
     start_season: str | None,
     end_season: str | None,
 ) -> list[str]:
-    """
-    Resolve season inputs to a sorted inclusive list of season years.
-    Examples:
-      season=2026 -> ['2026']
-      start=1997 end=2026 -> ['1997', ..., '2026']
+    """Resolve season CLI inputs to a sorted inclusive list of season years.
+
+    Args:
+        season (str): Default season year (e.g. 2026).
+        start_season (str | None): Backfill start year; with end_season gives range.
+        end_season (str | None): Backfill end year; with start_season gives range.
+
+    Returns:
+        list[str]: Season years, e.g. ['2026'] or ['1997', ..., '2026'].
     """
     if start_season is None and end_season is None:
         return [str(int(season))]
@@ -380,6 +529,11 @@ def resolve_seasons(
 
 
 def main() -> int:
+    """Parse CLI, load raw NBA data into DuckDB, optionally export to S3.
+
+    Returns:
+        int: Exit code (0 on success).
+    """
     parser = argparse.ArgumentParser(description="Load raw NBA data into DuckDB (+ optional S3)")
     parser.add_argument("--season", default="2026", help="Season year (e.g. 2026 for 2025-26)")
     parser.add_argument(

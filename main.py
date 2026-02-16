@@ -1,10 +1,10 @@
 # Standard Imports
 from __future__ import annotations
+
 import json
 
 # 3rd Party Imports
 import requests as r
-
 
 API_URL = "https://stats.nba.com/stats/{endpoint}"
 STATS_HEADERS = {

@@ -574,7 +574,7 @@ def main() -> int:
 
     seasons = resolve_seasons(args.season, args.start_season, args.end_season)
     log.info(
-        "Starting ingest for %d season(s): %s -> %s (season_type=%s)",
+        "Starting load for %d season(s): %s -> %s (season_type=%s)",
         len(seasons),
         seasons[0],
         seasons[-1],

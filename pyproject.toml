@@ -1,7 +1,7 @@
 [project]
 name = "nba-stats"
 version = "0.1.0"
-description = "NBA stats ingest (stats.nba.com) → DuckDB → dbt"
+description = "NBA stats load (stats.nba.com) → DuckDB → dbt"
 readme = "README.md"
 requires-python = ">=3.10"
 
@@ -14,8 +14,8 @@ exclude = [
     ".venv",
     "venv",
     "__pycache__",
-    "dbt_packages",
-    "target",
+    "transform/dbt_packages",
+    "transform/target",
 ]
 
 [tool.ruff.lint]

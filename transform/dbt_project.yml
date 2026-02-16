@@ -1,5 +1,5 @@
 # dbt project for NBA warehouse (DuckDB)
-# Run from repo root: DBT_PROFILES_DIR=dbt dbt run
+# Run from repo root: DBT_PROFILES_DIR=transform dbt run
 
 name: "nba_warehouse"
 version: "1.0.0"

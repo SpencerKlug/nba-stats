@@ -1,55 +1,55 @@
 # NBA Stats: API → DuckDB → dbt
 
-Raw NBA data from the `stats.nba.com` API is ingested into a **DuckDB** warehouse (with optional **AWS S3**), then transformed in **dbt**. No pre-aggregated marts are stored in ingest; standings and per-game stats are built in dbt from raw game logs.
+Raw NBA data from the `stats.nba.com` API is loaded into a **DuckDB** warehouse (with optional **AWS S3**), then transformed in **dbt**. No pre-aggregated marts are stored in load; standings and per-game stats are built in dbt from raw game logs.
 
 ## Architecture
 
-- **Ingest**: Python pulls raw API tables (`leaguegamelog`, `commonteamroster`) and loads them into DuckDB. Optionally exports to S3 as Parquet.
+- **Load**: Python pulls raw API tables (`leaguegamelog`, `commonteamroster`) and loads them into DuckDB. Optionally exports to S3 as Parquet.
 - **Warehouse**: DuckDB (local `warehouse.duckdb` or query over S3).
-- **dbt**: Staging models clean raw data; marts build standings (from team game logs) and player per-game stats (from player game logs).
+- **Transform (dbt)**: Staging models clean raw data; marts build standings (from team game logs) and player per-game stats (from player game logs).
 
 ## Setup
 
-### 1. Python (API client + ingest)
+### 1. Python (API client + load)
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Ingest raw data into DuckDB
+### 2. Load raw data into DuckDB
 
 From the project root:
 
 ```bash
 # Default: season 2026 (2025-26), writes to warehouse.duckdb
-python -m ingest.load_warehouse --season 2026
+python -m load.load_warehouse --season 2026
 
 # Custom DB path
-python -m ingest.load_warehouse --season 2026 --db path/to/warehouse.duckdb
+python -m load.load_warehouse --season 2026 --db path/to/warehouse.duckdb
 
 # Export to S3 (uses AWS credentials from env or ~/.aws/credentials)
 export NBA_S3_BUCKET=your-bucket
 export AWS_ACCESS_KEY_ID=...   # if not using default profile
 export AWS_SECRET_ACCESS_KEY=...
-python -m ingest.load_warehouse --season 2026 --s3-bucket your-bucket --s3-prefix nba/raw
+python -m load.load_warehouse --season 2026 --s3-bucket your-bucket --s3-prefix nba/raw
 ```
 
 Backfill a season range (inclusive):
 
 ```bash
 # Example: 1997 through 2026
-python -m ingest.load_warehouse --start-season 1997 --end-season 2026 --season-type "Regular Season"
+python -m load.load_warehouse --start-season 1997 --end-season 2026 --season-type "Regular Season"
 ```
 
 Backfill behavior is season-idempotent: rerunning the same season range overwrites that season's rows and keeps other seasons intact.
 
-Ingest writes three raw tables under the `raw` schema:
+Load writes three raw tables under the `raw` schema:
 
 - **team_game_logs** – one row per team per game (`leaguegamelog`, `PlayerOrTeam=T`).
 - **player_game_logs** – one row per player per game (`leaguegamelog`, `PlayerOrTeam=P`).
 - **team_rosters** – one row per player-team-season (`commonteamroster`).
 
-### 3. dbt (transformations)
+### 3. Transform (dbt)
 
 Install dbt with the DuckDB adapter:
 
@@ -57,15 +57,15 @@ Install dbt with the DuckDB adapter:
 pip install dbt-duckdb
 ```
 
-Run dbt from the project root with the profile in the `dbt` folder:
+Run dbt from the project root with the profile in the `transform` folder:
 
 ```bash
 cd /path/to/nba-stats
-DBT_PROFILES_DIR=dbt dbt deps
-DBT_PROFILES_DIR=dbt dbt run
+DBT_PROFILES_DIR=transform dbt deps
+DBT_PROFILES_DIR=transform dbt run
 ```
 
-By default, the profile uses `path: warehouse.duckdb` (relative to the current working directory). Point it at your DB path in `dbt/profiles.yml` if needed.
+By default, the profile uses `path: warehouse.duckdb` (relative to the current working directory). Point it at your DB path in `transform/profiles.yml` if needed.
 
 **Models:**
 
@@ -88,7 +88,7 @@ SELECT * FROM marts.player_per_game WHERE season = '2026' ORDER BY pts DESC LIMI
 
 ## Saving data in AWS
 
-- **Option A – Ingest exports to S3**: Use `--s3-bucket` and `--s3-prefix` (or `NBA_S3_BUCKET` / `NBA_S3_PREFIX`). Ingest writes Parquet files to `s3://<bucket>/<prefix>/raw/<table>.parquet`. You can then attach S3 in DuckDB and run dbt against those paths (e.g. by changing the DuckDB path in the profile to a DB that reads from S3).
+- **Option A – Load exports to S3**: Use `--s3-bucket` and `--s3-prefix` (or `NBA_S3_BUCKET` / `NBA_S3_PREFIX`). Load writes Parquet files to `s3://<bucket>/<prefix>/raw/<table>.parquet`. You can then attach S3 in DuckDB and run dbt against those paths (e.g. by changing the DuckDB path in the profile to a DB that reads from S3).
 - **Option B – Local DuckDB only**: Keep `warehouse.duckdb` local and back it up or sync to S3 yourself.
 
 ## Project layout
@@ -96,22 +96,22 @@ SELECT * FROM marts.player_per_game WHERE season = '2026' ORDER BY pts DESC LIMI
 ```
 nba-stats/
 ├── main.py                  # optional playground for API calls
-├── ingest/
-│   └── load_warehouse.py      # stats.nba.com API -> DuckDB (+ optional S3)
-├── dbt/
+├── load/
+│   └── load_warehouse.py    # stats.nba.com API -> DuckDB (+ optional S3)
+├── transform/
 │   ├── dbt_project.yml
-│   ├── profiles.yml          # DuckDB path; use DBT_PROFILES_DIR=dbt
+│   ├── profiles.yml        # DuckDB path; use DBT_PROFILES_DIR=transform
 │   ├── packages.yml
 │   └── models/
-│       ├── sources.yml       # raw.team_game_logs, raw.player_game_logs, raw.team_rosters
+│       ├── sources.yml     # raw.team_game_logs, raw.player_game_logs, raw.team_rosters
 │       ├── staging/
 │       └── marts/
-├── warehouse.duckdb          # Created by ingest (path configurable)
+├── warehouse.duckdb        # Created by load (path configurable)
 └── requirements.txt
 ```
 
 ## Notes
 
-- Ingest uses conservative headers + backoff for API requests to `stats.nba.com`.
+- Load uses conservative headers + backoff for API requests to `stats.nba.com`.
 - Raw data only: standings and per-game views are built in dbt from raw logs.
-- Close DuckDB clients (e.g., DBeaver) before ingest writes to the same `.duckdb` file, or write to a different `--db` path.
+- Close DuckDB clients (e.g., DBeaver) before load writes to the same `.duckdb` file, or write to a different `--db` path.

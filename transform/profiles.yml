@@ -1,4 +1,4 @@
-# Use from repo root: DBT_PROFILES_DIR=dbt dbt run
+# Use from repo root: DBT_PROFILES_DIR=transform dbt run
 # Or copy this to ~/.dbt/profiles.yml and set path to your warehouse.duckdb
 
 nba_warehouse:

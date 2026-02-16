@@ -97,7 +97,13 @@ SELECT * FROM marts.fact_player_per_game WHERE season = '2026' ORDER BY pts DESC
 nba-stats/
 ├── main.py                  # optional playground for API calls
 ├── load/
-│   └── load_warehouse.py    # stats.nba.com API -> DuckDB (+ optional S3)
+│   ├── load_warehouse.py    # CLI entrypoint: load raw data into DuckDB (+ optional S3)
+│   └── modules/
+│       ├── api.py           # NBA stats.nba.com client (retries, resultset_to_df)
+│       ├── aws.py           # S3 export (Parquet)
+│       ├── fetch.py         # load_team_game_logs, load_player_game_logs, load_team_rosters
+│       ├── utils.py         # to_snake_case, normalize_columns, season_to_label, resolve_seasons
+│       └── warehouse.py     # DuckDB init, upsert_raw_table, write_duckdb_for_season
 ├── transform/
 │   ├── dbt_project.yml
 │   ├── profiles.yml        # DuckDB path; use DBT_PROFILES_DIR=transform

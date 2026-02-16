@@ -71,8 +71,8 @@ By default, the profile uses `path: warehouse.duckdb` (relative to the current w
 
 - **Staging**: `stg_games`, `stg_player_totals`, `stg_roster` – cleanup and column alignment from raw API tables.
 - **Marts**:
-  - **standings** – conference standings (W, L, W/L%, GB) derived from `team_game_logs` only.
-  - **player_per_game** – per-game stats (PPG, RPG, APG, …) derived from `player_game_logs`.
+  - **fact_standings** – conference standings (W, L, W/L%, GB) derived from `team_game_logs` only.
+  - **fact_player_per_game** – per-game stats (PPG, RPG, APG, …) derived from `player_game_logs`.
 
 ### 4. Querying DuckDB
 
@@ -82,8 +82,8 @@ duckdb warehouse.duckdb
 
 ```sql
 SELECT * FROM staging.stg_games LIMIT 5;
-SELECT * FROM marts.standings ORDER BY conference, conf_rank;
-SELECT * FROM marts.player_per_game WHERE season = '2026' ORDER BY pts DESC LIMIT 10;
+SELECT * FROM marts.fact_standings ORDER BY conference, conf_rank;
+SELECT * FROM marts.fact_player_per_game WHERE season = '2026' ORDER BY pts DESC LIMIT 10;
 ```
 
 ## Saving data in AWS

@@ -8,6 +8,7 @@ import time
 
 import pandas as pd
 import requests
+from requests.exceptions import Timeout as RequestsTimeout
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ STATS_HEADERS = {
 RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
 MAX_RETRIES = int(os.getenv("NBA_API_MAX_RETRIES", "7"))
 REQUEST_DELAY_SECONDS = float(os.getenv("NBA_API_REQUEST_DELAY_SECONDS", "1.5"))
+REQUEST_TIMEOUT_SECONDS = float(os.getenv("NBA_API_TIMEOUT_SECONDS", "60"))
 BACKOFF_INITIAL_SECONDS = float(os.getenv("NBA_API_BACKOFF_INITIAL_SECONDS", "2.0"))
 BACKOFF_MAX_SECONDS = float(os.getenv("NBA_API_BACKOFF_MAX_SECONDS", "120.0"))
 
@@ -73,7 +75,19 @@ def call_stats_api(endpoint: str, params: dict[str, str]) -> dict:
     time.sleep(REQUEST_DELAY_SECONDS)
     for attempt in range(MAX_RETRIES + 1):
         log.info("GET %s attempt=%d/%d", endpoint, attempt + 1, MAX_RETRIES + 1)
-        resp = _SESSION.get(url, params=params, timeout=30)
+        try:
+            resp = _SESSION.get(url, params=params, timeout=REQUEST_TIMEOUT_SECONDS)
+        except RequestsTimeout:
+            if attempt < MAX_RETRIES:
+                wait = _retry_wait_seconds(attempt)
+                log.warning(
+                    "timeout endpoint=%s retrying in %.1fs",
+                    endpoint,
+                    wait,
+                )
+                time.sleep(wait)
+                continue
+            raise
         if resp.status_code in RETRY_STATUS_CODES:
             if attempt < MAX_RETRIES:
                 wait = _retry_wait_seconds(attempt, resp)

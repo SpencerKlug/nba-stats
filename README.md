@@ -1,4 +1,4 @@
-# NBA Stats: Scrape → DuckDB → dbt
+# NBA Stats: API → DuckDB → dbt
 
 Raw NBA data from the `stats.nba.com` API is ingested into a **DuckDB** warehouse (with optional **AWS S3**), then transformed in **dbt**. No pre-aggregated marts are stored in ingest; standings and per-game stats are built in dbt from raw game logs.
 
@@ -10,7 +10,7 @@ Raw NBA data from the `stats.nba.com` API is ingested into a **DuckDB** warehous
 
 ## Setup
 
-### 1. Python (scraper + ingest)
+### 1. Python (API client + ingest)
 
 ```bash
 pip install -r requirements.txt
@@ -112,6 +112,6 @@ nba-stats/
 
 ## Notes
 
-- Ingest uses conservative headers + backoff for `stats.nba.com`.
+- Ingest uses conservative headers + backoff for API requests to `stats.nba.com`.
 - Raw data only: standings and per-game views are built in dbt from raw logs.
 - Close DuckDB clients (e.g., DBeaver) before ingest writes to the same `.duckdb` file, or write to a different `--db` path.

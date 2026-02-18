@@ -5,9 +5,11 @@ from __future__ import annotations
 import logging
 import os
 import time
+from urllib.parse import urlencode
 
 import pandas as pd
 import requests
+from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import Timeout as RequestsTimeout
 
 log = logging.getLogger(__name__)
@@ -77,13 +79,17 @@ def call_stats_api(endpoint: str, params: dict[str, str]) -> dict:
         log.info("GET %s attempt=%d/%d", endpoint, attempt + 1, MAX_RETRIES + 1)
         try:
             resp = _SESSION.get(url, params=params, timeout=REQUEST_TIMEOUT_SECONDS)
-        except RequestsTimeout:
+        except (RequestsTimeout, RequestsConnectionError) as e:
             if attempt < MAX_RETRIES:
                 wait = _retry_wait_seconds(attempt)
+                kind = "timeout" if isinstance(e, RequestsTimeout) else "connection reset"
+                full_url = f"{url}?{urlencode(params)}" if params else url
                 log.warning(
-                    "timeout endpoint=%s retrying in %.1fs",
+                    "%s endpoint=%s retrying in %.1fs url=%s",
+                    kind,
                     endpoint,
                     wait,
+                    full_url,
                 )
                 time.sleep(wait)
                 continue

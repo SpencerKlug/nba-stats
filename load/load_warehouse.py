@@ -2,10 +2,10 @@
 Load raw NBA data from stats.nba.com into DuckDB (data warehouse).
 Writes to a local DuckDB file and can export tables to S3 as Parquet.
 
-Raw-only tables loaded:
-- team_game_logs (one row per team per game)
-- player_game_logs (one row per player per game)
-- team_rosters (one row per player-team-season)
+Raw tables loaded:
+- team_game_logs, player_game_logs, team_rosters (core)
+- common_all_players, player_info (dimensions)
+- schedule, box_summaries (game metadata)
 
 All aggregations (standings, per-game rollups, etc.) are done in dbt.
 """

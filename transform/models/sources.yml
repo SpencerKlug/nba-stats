@@ -11,3 +11,11 @@ sources:
         description: One row per player per game from leaguegamelog (PlayerOrTeam=P)
       - name: team_rosters
         description: Team roster rows from commonteamroster endpoint
+      - name: common_all_players
+        description: Master player list from commonallplayers (one row per player per season)
+      - name: player_info
+        description: Player bio (height, weight, school, draft) from commonplayerinfo
+      - name: schedule
+        description: Game schedule metadata (arena, tip time) from scoreboardv2 GameHeader
+      - name: box_summaries
+        description: Game summary (arena, officials, attendance) from boxscoresummaryv2 GameSummary

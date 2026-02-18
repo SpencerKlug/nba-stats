@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
+from typing import Any
 from urllib.parse import urlencode
 
+import aiohttp
 import pandas as pd
 import requests
 from requests.exceptions import ConnectionError as RequestsConnectionError
@@ -33,6 +36,7 @@ STATS_HEADERS = {
 
 RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
 MAX_RETRIES = int(os.getenv("NBA_API_MAX_RETRIES", "7"))
+CONCURRENT_REQUESTS = int(os.getenv("NBA_API_CONCURRENT_REQUESTS", "3"))
 REQUEST_DELAY_SECONDS = float(os.getenv("NBA_API_REQUEST_DELAY_SECONDS", "1.5"))
 REQUEST_TIMEOUT_SECONDS = float(os.getenv("NBA_API_TIMEOUT_SECONDS", "60"))
 BACKOFF_INITIAL_SECONDS = float(os.getenv("NBA_API_BACKOFF_INITIAL_SECONDS", "2.0"))
@@ -42,7 +46,7 @@ _SESSION = requests.Session()
 _SESSION.headers.update(STATS_HEADERS)
 
 
-def _retry_wait_seconds(attempt: int, resp: requests.Response | None = None) -> float:
+def _retry_wait_seconds(attempt: int, resp: requests.Response | Any = None) -> float:
     """Compute retry wait time (exponential backoff, optional Retry-After header).
 
     Args:
@@ -108,6 +112,64 @@ def call_stats_api(endpoint: str, params: dict[str, str]) -> dict:
             resp.raise_for_status()
         resp.raise_for_status()
         return resp.json()
+    raise RuntimeError(f"Failed to fetch endpoint={endpoint}")
+
+
+async def call_stats_api_async(
+    session: aiohttp.ClientSession,
+    semaphore: asyncio.Semaphore,
+    endpoint: str,
+    params: dict[str, str],
+) -> dict:
+    """Call a stats.nba.com endpoint asynchronously with retries and concurrency limit.
+
+    Args:
+        session: aiohttp ClientSession.
+        semaphore: Semaphore limiting concurrent requests (e.g. 3).
+        endpoint: API endpoint path (e.g. leaguegamelog).
+        params: Query parameters for the request.
+
+    Returns:
+        dict: JSON response body.
+    """
+    url = f"{STATS_BASE_URL}/{endpoint}"
+    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SECONDS)
+
+    async with semaphore:
+        await asyncio.sleep(REQUEST_DELAY_SECONDS)
+        for attempt in range(MAX_RETRIES + 1):
+            log.info("GET %s attempt=%d/%d", endpoint, attempt + 1, MAX_RETRIES + 1)
+            try:
+                async with session.get(url, params=params, timeout=timeout) as resp:
+                    if resp.status in RETRY_STATUS_CODES:
+                        if attempt < MAX_RETRIES:
+                            wait = _retry_wait_seconds(attempt, resp)
+                            log.warning(
+                                "status=%s endpoint=%s retrying in %.1fs",
+                                resp.status,
+                                endpoint,
+                                wait,
+                            )
+                            await asyncio.sleep(wait)
+                            continue
+                        resp.raise_for_status()
+                    resp.raise_for_status()
+                    return await resp.json()
+            except (asyncio.TimeoutError, aiohttp.ClientError) as e:
+                if attempt < MAX_RETRIES:
+                    wait = _retry_wait_seconds(attempt)
+                    kind = "timeout" if isinstance(e, asyncio.TimeoutError) else "connection reset"
+                    full_url = f"{url}?{urlencode(params)}" if params else url
+                    log.warning(
+                        "%s endpoint=%s retrying in %.1fs url=%s",
+                        kind,
+                        endpoint,
+                        wait,
+                        full_url,
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                raise
     raise RuntimeError(f"Failed to fetch endpoint={endpoint}")
 
 

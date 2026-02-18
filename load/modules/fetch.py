@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from typing import Any
 
+import aiohttp
 import pandas as pd
 
 from load.modules import api, utils
@@ -369,32 +372,197 @@ def load_player_info(common_all_players: pd.DataFrame, season: str) -> pd.DataFr
     return out
 
 
-def load_all_raw(season: str, season_type: str = "Regular Season") -> dict[str, pd.DataFrame]:
-    """Fetch all raw tables from NBA stats API.
+async def _load_all_raw_async(
+    session: aiohttp.ClientSession,
+    semaphore: asyncio.Semaphore,
+    season: str,
+    season_type: str,
+) -> dict[str, pd.DataFrame]:
+    """Async implementation: fetch all raw tables with 3 concurrent workers."""
+    season_label = utils.season_to_label(season)
 
-    Core: team logs, player logs, rosters.
-    Dimensions: common_all_players, player_info, schedule, box_summaries.
+    async def one(endpoint: str, params: dict[str, str]) -> dict:
+        return await api.call_stats_api_async(session, semaphore, endpoint, params)
 
-    Args:
-        season (str): Season year (e.g. 2026 for 2025-26).
-        season_type (str, optional): NBA API season type. Defaults to "Regular Season".
+    def to_df(payload: dict, name: str | None = None, index: int = 0) -> pd.DataFrame:
+        return api.resultset_to_df(payload, name=name, index=index)
 
-    Returns:
-        dict[str, pd.DataFrame]: Raw table DataFrames.
-    """
+    # Phase 1: initial bulk endpoints (3 parallel)
     log.info("Fetching raw NBA stats data for season=%s season_type=%s", season, season_type)
-    team_logs = load_team_game_logs(season=season, season_type=season_type)
-    player_logs = load_player_game_logs(season=season, season_type=season_type)
-    rosters = load_team_rosters(season=season, team_game_logs=team_logs)
+    log.info("Loading team game logs, player game logs, commonallplayers (3 parallel)")
+    team_payload, player_payload, common_payload = await asyncio.gather(
+        one(
+            "leaguegamelog",
+            {
+                "Counter": "1000",
+                "Direction": "DESC",
+                "LeagueID": "00",
+                "PlayerOrTeam": "T",
+                "Season": season_label,
+                "SeasonType": season_type,
+                "Sorter": "DATE",
+            },
+        ),
+        one(
+            "leaguegamelog",
+            {
+                "Counter": "1000",
+                "Direction": "DESC",
+                "LeagueID": "00",
+                "PlayerOrTeam": "P",
+                "Season": season_label,
+                "SeasonType": season_type,
+                "Sorter": "DATE",
+            },
+        ),
+        one(
+            "commonallplayers",
+            {"LeagueID": "00", "Season": season_label, "IsOnlyCurrentSeason": "1"},
+        ),
+    )
 
-    common_players = load_common_all_players(season=season)
-    schedule = load_schedule(
-        team_game_logs=team_logs, season=season, season_type=season_type
-    )
-    box_summaries = load_box_score_summaries(
-        team_game_logs=team_logs, season=season, season_type=season_type
-    )
-    player_info = load_player_info(common_all_players=common_players, season=season)
+    team_logs = to_df(team_payload)
+    if not team_logs.empty:
+        team_logs = utils.normalize_columns(team_logs)
+        team_logs["season"] = season
+        team_logs["season_label"] = season_label
+        team_logs["season_type"] = season_type
+    log.info("  team_game_logs: %d rows", len(team_logs))
+
+    player_logs = to_df(player_payload)
+    if not player_logs.empty:
+        player_logs = utils.normalize_columns(player_logs)
+        player_logs["season"] = season
+        player_logs["season_label"] = season_label
+        player_logs["season_type"] = season_type
+    log.info("  player_game_logs: %d rows", len(player_logs))
+
+    common_players = to_df(common_payload, name="CommonAllPlayers")
+    if not common_players.empty:
+        common_players = utils.normalize_columns(common_players)
+        common_players["season"] = season
+        common_players["season_label"] = season_label
+    log.info("  common_all_players: %d rows", len(common_players))
+
+    # Phase 2: rosters and schedule (parallel, each uses semaphore)
+    if team_logs.empty or "team_id" not in team_logs.columns:
+        rosters = pd.DataFrame()
+        schedule = pd.DataFrame()
+    else:
+        teams = (
+            team_logs[["team_id", "team_abbreviation"]]
+            .drop_duplicates()
+            .sort_values("team_abbreviation")
+        )
+        dates = team_logs["game_date"].dropna().unique().tolist()
+        log.info("Loading rosters for %d teams", len(teams))
+        log.info("Loading schedule for %d unique dates", len(dates))
+
+        async def fetch_roster(row: Any) -> pd.DataFrame:
+            team_id = int(row.team_id)
+            team_abbrev = str(row.team_abbreviation)
+            p = await one(
+                "commonteamroster",
+                {"LeagueID": "00", "Season": season_label, "TeamID": str(team_id)},
+            )
+            df = to_df(p, name="CommonTeamRoster")
+            if df.empty:
+                return pd.DataFrame()
+            df = utils.normalize_columns(df)
+            df["team_id"] = team_id
+            df["team_abbreviation"] = team_abbrev
+            df["season"] = season
+            df["season_label"] = season_label
+            return df
+
+        async def fetch_scoreboard(d: str) -> pd.DataFrame:
+            api_date = _game_date_for_api(d)
+            p = await one(
+                "scoreboardv2",
+                {"LeagueID": "00", "GameDate": api_date, "DayOffset": "0"},
+            )
+            df = to_df(p, name="GameHeader")
+            if df.empty:
+                return df
+            df = utils.normalize_columns(df)
+            df["game_date_api"] = api_date
+            df["season"] = season
+            df["season_type"] = season_type
+            return df
+
+        roster_dfs = await asyncio.gather(
+            *[fetch_roster(row) for row in teams.itertuples(index=False)]
+        )
+        schedule_dfs = await asyncio.gather(
+            *[fetch_scoreboard(str(d)) for d in sorted(dates)]
+        )
+
+        roster_list = [d for d in roster_dfs if not d.empty]
+        schedule_list = [d for d in schedule_dfs if not d.empty]
+        rosters = pd.concat(roster_list, ignore_index=True) if roster_list else pd.DataFrame()
+        schedule = pd.concat(schedule_list, ignore_index=True) if schedule_list else pd.DataFrame()
+        schedule = schedule.drop_duplicates(subset=["game_id"])
+        log.info("  team_rosters: %d rows", len(rosters))
+        log.info("  schedule: %d games", len(schedule))
+
+    # Phase 3: box summaries and player info (parallel)
+    if team_logs.empty or "game_id" not in team_logs.columns:
+        box_summaries = pd.DataFrame()
+    else:
+        game_ids = (
+            team_logs["game_id"].dropna().astype(str).str.strip().unique().tolist()
+        )
+        log.info("Loading box score summaries for %d games", len(game_ids))
+
+        async def fetch_box(gid: str) -> pd.DataFrame:
+            p = await one(
+                "boxscoresummaryv2",
+                {
+                    "GameID": str(gid),
+                    "StartPeriod": "0",
+                    "EndPeriod": "14",
+                    "StartRange": "0",
+                    "EndRange": "2147483647",
+                    "RangeType": "0",
+                },
+            )
+            df = to_df(p, name="GameSummary")
+            if df.empty:
+                return df
+            df = utils.normalize_columns(df)
+            df["season"] = season
+            df["season_type"] = season_type
+            return df
+
+        box_dfs = await asyncio.gather(*[fetch_box(gid) for gid in game_ids])
+        box_list = [d for d in box_dfs if not d.empty]
+        box_summaries = pd.concat(box_list, ignore_index=True) if box_list else pd.DataFrame()
+        log.info("  box_summaries: %d rows", len(box_summaries))
+
+    if common_players.empty or "person_id" not in common_players.columns:
+        player_info = pd.DataFrame()
+    else:
+        player_ids = common_players["person_id"].dropna().unique().tolist()
+        log.info("Loading player info for %d players", len(player_ids))
+
+        async def fetch_player_info(pid: Any) -> pd.DataFrame:
+            p = await one(
+                "commonplayerinfo",
+                {"LeagueID": "00", "PlayerID": str(pid)},
+            )
+            df = to_df(p, name="CommonPlayerInfo")
+            if df.empty:
+                return df
+            df = utils.normalize_columns(df)
+            df["season"] = season
+            return df
+
+        player_dfs = await asyncio.gather(
+            *[fetch_player_info(pid) for pid in player_ids]
+        )
+        player_list = [d for d in player_dfs if not d.empty]
+        player_info = pd.concat(player_list, ignore_index=True) if player_list else pd.DataFrame()
+        log.info("  player_info: %d rows", len(player_info))
 
     tables = {
         "team_game_logs": team_logs,
@@ -417,3 +585,27 @@ def load_all_raw(season: str, season_type: str = "Regular Season") -> dict[str, 
         len(player_info),
     )
     return tables
+
+
+def load_all_raw(season: str, season_type: str = "Regular Season") -> dict[str, pd.DataFrame]:
+    """Fetch all raw tables from NBA stats API (async, 3 concurrent workers).
+
+    Core: team logs, player logs, rosters.
+    Dimensions: common_all_players, player_info, schedule, box_summaries.
+
+    Args:
+        season (str): Season year (e.g. 2026 for 2025-26).
+        season_type (str, optional): NBA API season type. Defaults to "Regular Season".
+
+    Returns:
+        dict[str, pd.DataFrame]: Raw table DataFrames.
+    """
+    semaphore = asyncio.Semaphore(api.CONCURRENT_REQUESTS)
+    headers = {**api.STATS_HEADERS}
+    headers["Connection"] = "keep-alive"
+
+    async def run() -> dict[str, pd.DataFrame]:
+        async with aiohttp.ClientSession(headers=headers) as session:
+            return await _load_all_raw_async(session, semaphore, season, season_type)
+
+    return asyncio.run(run())

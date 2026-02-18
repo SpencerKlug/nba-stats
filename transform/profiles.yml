@@ -1,12 +1,13 @@
-# Use from repo root: DBT_PROFILES_DIR=transform dbt run
-# Or copy this to ~/.dbt/profiles.yml and set path to your warehouse.duckdb
+# Run from project root so load and dbt use the same DB:
+#   python -m load.load_warehouse --season 2026   # writes to warehouse.duckdb
+#   DBT_PROFILES_DIR=transform dbt build --project-dir transform
+# Path is relative to current working directory (project root).
 
 nba_warehouse:
   target: dev
   outputs:
     dev:
       type: duckdb
-      # Path relative to where you run dbt (run from repo root)
       path: "warehouse.duckdb"
     prod:
       type: duckdb

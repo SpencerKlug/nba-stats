@@ -1,0 +1,38 @@
+version: 2
+
+models:
+  - name: stg_players
+    description: Master player list from commonallplayers (one row per player per season)
+    columns:
+      - name: player_id
+        description: NBA person/player ID
+      - name: player_name
+        description: Display name (first last)
+      - name: team_abbrev
+        description: Team abbreviation for current season
+
+  - name: stg_player_info
+    description: Player bio from commonplayerinfo (height, weight, school, draft)
+    columns:
+      - name: player_id
+        description: NBA person/player ID
+      - name: height
+        description: Player height (e.g. 6-9)
+      - name: weight
+        description: Player weight in lbs
+
+  - name: stg_schedule
+    description: Game schedule metadata from scoreboardv2 GameHeader
+    columns:
+      - name: game_id
+        description: 10-digit NBA game ID
+      - name: arena_name
+        description: Arena/venue name
+
+  - name: stg_box_summaries
+    description: Game summary from boxscoresummaryv2 GameSummary
+    columns:
+      - name: game_id
+        description: 10-digit NBA game ID
+      - name: arena_name
+        description: Arena/venue name

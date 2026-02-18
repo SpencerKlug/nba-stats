@@ -1,0 +1,14 @@
+version: 2
+
+models:
+  - name: int_player_dim
+    description: Player dimension merging common_all_players with player_info (bio)
+    columns:
+      - name: player_id
+        description: NBA person/player ID
+
+  - name: int_game_schedule
+    description: Game dimension merging schedule with box summaries
+    columns:
+      - name: game_id
+        description: 10-digit NBA game ID

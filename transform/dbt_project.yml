@@ -21,5 +21,7 @@ models:
   nba_warehouse:
     staging:
       +schema: staging
+    intermediate:
+      +schema: intermediate
     marts:
       +schema: marts

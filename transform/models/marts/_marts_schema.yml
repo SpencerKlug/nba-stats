@@ -1,0 +1,18 @@
+version: 2
+
+models:
+  - name: dim_players
+    description: Player dimension (one row per player per season with bio attributes)
+    columns:
+      - name: player_id
+        description: NBA person/player ID
+      - name: player_name
+        description: Display name
+
+  - name: dim_games
+    description: Game dimension (one row per game with arena, teams, status)
+    columns:
+      - name: game_id
+        description: 10-digit NBA game ID
+      - name: arena_name
+        description: Arena/venue name

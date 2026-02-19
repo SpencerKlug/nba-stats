@@ -16,6 +16,23 @@ from typing import Any, Callable, Awaitable
 
 import pandas as pd
 
+from load.models import (
+    BoxScoreParams,
+    CommonAllPlayersParams,
+    CommonPlayoffSeriesParams,
+    CommonPlayerInfoParams,
+    CommonTeamRosterParams,
+    CommonTeamYearsParams,
+    DraftHistoryParams,
+    Endpoint,
+    LeagueDashLineupsParams,
+    LeagueGameLogParams,
+    PlayByPlayParams,
+    ResultSet,
+    ScoreboardParams,
+    ShotChartParams,
+    TeamDashLineupsParams,
+)
 from load.modules import utils
 
 log = logging.getLogger(__name__)
@@ -46,35 +63,13 @@ async def fetch_core(
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Team logs, player logs, common_all_players."""
     log.info("Fetching team logs, player logs, commonallplayers (3 parallel)")
+    team_params = LeagueGameLogParams(season=ctx.season_label, season_type=ctx.season_type, player_or_team="T")
+    player_params = LeagueGameLogParams(season=ctx.season_label, season_type=ctx.season_type, player_or_team="P")
+    common_params = CommonAllPlayersParams(season=ctx.season_label)
     team_p, player_p, common_p = await asyncio.gather(
-        one(
-            "leaguegamelog",
-            {
-                "Counter": "1000",
-                "Direction": "DESC",
-                "LeagueID": "00",
-                "PlayerOrTeam": "T",
-                "Season": ctx.season_label,
-                "SeasonType": ctx.season_type,
-                "Sorter": "DATE",
-            },
-        ),
-        one(
-            "leaguegamelog",
-            {
-                "Counter": "1000",
-                "Direction": "DESC",
-                "LeagueID": "00",
-                "PlayerOrTeam": "P",
-                "Season": ctx.season_label,
-                "SeasonType": ctx.season_type,
-                "Sorter": "DATE",
-            },
-        ),
-        one(
-            "commonallplayers",
-            {"LeagueID": "00", "Season": ctx.season_label, "IsOnlyCurrentSeason": "1"},
-        ),
+        one(Endpoint.LEAGUE_GAME_LOG.value, team_params.to_api_dict()),
+        one(Endpoint.LEAGUE_GAME_LOG.value, player_params.to_api_dict()),
+        one(Endpoint.COMMON_ALL_PLAYERS.value, common_params.to_api_dict()),
     )
     team_logs = to_df(team_p)
     if not team_logs.empty:
@@ -88,7 +83,7 @@ async def fetch_core(
         player_logs["season"] = ctx.season
         player_logs["season_label"] = ctx.season_label
         player_logs["season_type"] = ctx.season_type
-    common = to_df(common_p, name="CommonAllPlayers")
+    common = to_df(common_p, name=ResultSet.COMMON_ALL_PLAYERS.value)
     if not common.empty:
         common = utils.normalize_columns(common)
         common["season"] = ctx.season
@@ -114,8 +109,9 @@ async def fetch_rosters_schedule(
     async def roster(row: Any) -> pd.DataFrame:
         tid, abbrev = int(row.team_id), str(row.team_abbreviation)
         try:
-            p = await one("commonteamroster", {"LeagueID": "00", "Season": ctx.season_label, "TeamID": str(tid)})
-            df = to_df(p, name="CommonTeamRoster")
+            params = CommonTeamRosterParams(season=ctx.season_label, team_id=str(tid))
+            p = await one(Endpoint.COMMON_TEAM_ROSTER.value, params.to_api_dict())
+            df = to_df(p, name=ResultSet.COMMON_TEAM_ROSTER.value)
             if df.empty:
                 return df
             df = utils.normalize_columns(df)
@@ -130,8 +126,9 @@ async def fetch_rosters_schedule(
 
     async def scoreboard(d: str) -> pd.DataFrame:
         try:
-            p = await one("scoreboardv2", {"LeagueID": "00", "GameDate": _game_date_for_api(d), "DayOffset": "0"})
-            df = to_df(p, name="GameHeader")
+            params = ScoreboardParams(game_date=_game_date_for_api(d))
+            p = await one(Endpoint.SCOREBOARD.value, params.to_api_dict())
+            df = to_df(p, name=ResultSet.GAME_HEADER.value)
             if df.empty:
                 return df
             df = utils.normalize_columns(df)
@@ -161,10 +158,13 @@ async def fetch_reference(
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """common_team_years, draft_history, common_playoff_series."""
     log.info("Loading commonteamyears, drafthistory, commonplayoffseries")
+    ct_params = CommonTeamYearsParams()
+    dh_params = DraftHistoryParams()
+    cps_params = CommonPlayoffSeriesParams(season=ctx.season_label)
     a, b, c = await asyncio.gather(
-        one("commonteamyears", {"LeagueID": "00"}),
-        one("drafthistory", {"LeagueID": "00"}),
-        one("commonplayoffseries", {"LeagueID": "00", "Season": ctx.season_label}),
+        one(Endpoint.COMMON_TEAM_YEARS.value, ct_params.to_api_dict()),
+        one(Endpoint.DRAFT_HISTORY.value, dh_params.to_api_dict()),
+        one(Endpoint.COMMON_PLAYOFF_SERIES.value, cps_params.to_api_dict()),
     )
     ct = utils.normalize_columns(to_df(a, index=0))
     if not ct.empty:
@@ -189,10 +189,8 @@ async def fetch_lineups(
     log.info("Loading leaguedashlineups and teamdashlineups")
     league = pd.DataFrame()
     try:
-        p = await one(
-            "leaguedashlineups",
-            {"LeagueID": "00", "Season": ctx.season_label, "SeasonType": ctx.season_type, "GroupQuantity": "5", "PerMode": "Totals", "MeasureType": "Base"},
-        )
+        ldl_params = LeagueDashLineupsParams(season=ctx.season_label, season_type=ctx.season_type)
+        p = await one(Endpoint.LEAGUE_DASH_LINEUPS.value, ldl_params.to_api_dict())
         league = to_df(p, index=0)
         if not league.empty:
             league = utils.normalize_columns(league)
@@ -207,7 +205,8 @@ async def fetch_lineups(
     if team_ids:
         async def tl(tid: int) -> pd.DataFrame:
             try:
-                p = await one("teamdashlineups", {"LeagueID": "00", "Season": ctx.season_label, "SeasonType": ctx.season_type, "TeamID": str(tid), "GroupQuantity": "5"})
+                tdl_params = TeamDashLineupsParams(season=ctx.season_label, season_type=ctx.season_type, team_id=str(tid))
+                p = await one(Endpoint.TEAM_DASH_LINEUPS.value, tdl_params.to_api_dict())
                 df = to_df(p, index=0)
                 if df.empty:
                     return df
@@ -235,12 +234,12 @@ async def fetch_box_and_pbp(
     if ctx.limit is not None:
         game_ids = game_ids[: ctx.limit]
     log.info("Loading box scores and play-by-play for %d games", len(game_ids))
-    box_params = {"StartPeriod": "0", "EndPeriod": "14", "StartRange": "0", "EndRange": "2147483647", "RangeType": "0"}
 
     async def box(gid: str):
         try:
-            p = await one("boxscoresummaryv2", {**box_params, "GameID": gid})
-            df = to_df(p, name="GameSummary")
+            params = BoxScoreParams(game_id=gid)
+            p = await one(Endpoint.BOX_SCORE_SUMMARY.value, params.to_api_dict())
+            df = to_df(p, name=ResultSet.GAME_SUMMARY.value)
             if df.empty:
                 return df
             df = utils.normalize_columns(df)
@@ -253,7 +252,8 @@ async def fetch_box_and_pbp(
 
     async def adv(gid: str):
         try:
-            p = await one("boxscoreadvancedv2", {**box_params, "GameID": gid})
+            params = BoxScoreParams(game_id=gid)
+            p = await one(Endpoint.BOX_SCORE_ADVANCED.value, params.to_api_dict())
             df = to_df(p, index=0)
             if df.empty:
                 return df
@@ -267,7 +267,8 @@ async def fetch_box_and_pbp(
 
     async def trad(gid: str):
         try:
-            p = await one("boxscoretraditionalv2", {**box_params, "GameID": gid})
+            params = BoxScoreParams(game_id=gid)
+            p = await one(Endpoint.BOX_SCORE_TRADITIONAL.value, params.to_api_dict())
             df = to_df(p, index=0)
             if df.empty:
                 return df
@@ -281,7 +282,8 @@ async def fetch_box_and_pbp(
 
     async def pbp(gid: str):
         try:
-            p = await one("playbyplayv2", {"GameID": gid, "StartPeriod": "0", "EndPeriod": "14"})
+            params = PlayByPlayParams(game_id=gid)
+            p = await one(Endpoint.PLAY_BY_PLAY.value, params.to_api_dict())
             df = to_df(p, index=0)
             if df.empty:
                 return df
@@ -322,7 +324,8 @@ async def fetch_shot_charts(
 
     async def fetch(gid: str, tid: int) -> pd.DataFrame:
         try:
-            p = await one("shotchartdetail", {"LeagueID": "00", "Season": ctx.season_label, "SeasonType": ctx.season_type, "GameID": gid, "TeamID": str(tid)})
+            params = ShotChartParams(season=ctx.season_label, season_type=ctx.season_type, game_id=gid, team_id=str(tid))
+            p = await one(Endpoint.SHOT_CHART.value, params.to_api_dict())
             df = to_df(p, index=0)
             if df.empty:
                 return df
@@ -354,8 +357,9 @@ async def fetch_player_info(
 
     async def fetch(pid: Any) -> pd.DataFrame:
         try:
-            p = await one("commonplayerinfo", {"LeagueID": "00", "PlayerID": str(pid)})
-            df = to_df(p, name="CommonPlayerInfo")
+            params = CommonPlayerInfoParams(player_id=str(pid))
+            p = await one(Endpoint.COMMON_PLAYER_INFO.value, params.to_api_dict())
+            df = to_df(p, name=ResultSet.COMMON_PLAYER_INFO.value)
             if df.empty:
                 return df
             df = utils.normalize_columns(df)

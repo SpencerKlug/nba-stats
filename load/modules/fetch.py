@@ -4,11 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
 
 import aiohttp
 import pandas as pd
 
+from load.models import (
+    BoxScoreParams,
+    CommonAllPlayersParams,
+    CommonPlayerInfoParams,
+    CommonTeamRosterParams,
+    Endpoint,
+    LeagueGameLogParams,
+    ResultSet,
+    ScoreboardParams,
+)
 from load.modules import api, utils
 
 log = logging.getLogger(__name__)
@@ -35,18 +45,8 @@ def load_team_game_logs(season: str, season_type: str = "Regular Season") -> pd.
     """
     season_label = utils.season_to_label(season)
     log.info("Loading team game logs season=%s (%s)", season_label, season_type)
-    payload = api.call_stats_api(
-        "leaguegamelog",
-        {
-            "Counter": "1000",
-            "Direction": "DESC",
-            "LeagueID": "00",
-            "PlayerOrTeam": "T",
-            "Season": season_label,
-            "SeasonType": season_type,
-            "Sorter": "DATE",
-        },
-    )
+    params = LeagueGameLogParams(season=season_label, season_type=season_type, player_or_team="T")
+    payload = api.call_stats_api(Endpoint.LEAGUE_GAME_LOG.value, params.to_api_dict())
     df = api.resultset_to_df(payload)
     if df.empty:
         log.warning("No team game logs returned")
@@ -71,18 +71,8 @@ def load_player_game_logs(season: str, season_type: str = "Regular Season") -> p
     """
     season_label = utils.season_to_label(season)
     log.info("Loading player game logs season=%s (%s)", season_label, season_type)
-    payload = api.call_stats_api(
-        "leaguegamelog",
-        {
-            "Counter": "1000",
-            "Direction": "DESC",
-            "LeagueID": "00",
-            "PlayerOrTeam": "P",
-            "Season": season_label,
-            "SeasonType": season_type,
-            "Sorter": "DATE",
-        },
-    )
+    params = LeagueGameLogParams(season=season_label, season_type=season_type, player_or_team="P")
+    payload = api.call_stats_api(Endpoint.LEAGUE_GAME_LOG.value, params.to_api_dict())
     df = api.resultset_to_df(payload)
     if df.empty:
         log.warning("No player game logs returned")
@@ -122,11 +112,9 @@ def load_team_rosters(season: str, team_game_logs: pd.DataFrame) -> pd.DataFrame
     for i, row in enumerate(teams.itertuples(index=False), 1):
         team_id = int(row.team_id)
         team_abbrev = str(row.team_abbreviation)
-        payload = api.call_stats_api(
-            "commonteamroster",
-            {"LeagueID": "00", "Season": season_label, "TeamID": str(team_id)},
-        )
-        df = api.resultset_to_df(payload, name="CommonTeamRoster")
+        params = CommonTeamRosterParams(season=season_label, team_id=str(team_id))
+        payload = api.call_stats_api(Endpoint.COMMON_TEAM_ROSTER.value, params.to_api_dict())
+        df = api.resultset_to_df(payload, name=ResultSet.COMMON_TEAM_ROSTER.value)
         if df.empty:
             log.warning("  %s (%s): empty roster", team_abbrev, team_id)
             continue
@@ -163,15 +151,9 @@ def load_common_all_players(season: str) -> pd.DataFrame:
     """
     season_label = utils.season_to_label(season)
     log.info("Loading commonallplayers season=%s", season_label)
-    payload = api.call_stats_api(
-        "commonallplayers",
-        {
-            "LeagueID": "00",
-            "Season": season_label,
-            "IsOnlyCurrentSeason": "1",
-        },
-    )
-    df = api.resultset_to_df(payload, name="CommonAllPlayers")
+    params = CommonAllPlayersParams(season=season_label)
+    payload = api.call_stats_api(Endpoint.COMMON_ALL_PLAYERS.value, params.to_api_dict())
+    df = api.resultset_to_df(payload, name=ResultSet.COMMON_ALL_PLAYERS.value)
     if df.empty:
         log.warning("No commonallplayers returned")
         return df
@@ -196,11 +178,9 @@ def load_scoreboard(
         pd.DataFrame: One row per game (schedule metadata).
     """
     api_date = _game_date_for_api(game_date)
-    payload = api.call_stats_api(
-        "scoreboardv2",
-        {"LeagueID": "00", "GameDate": api_date, "DayOffset": "0"},
-    )
-    df = api.resultset_to_df(payload, name="GameHeader")
+    params = ScoreboardParams(game_date=api_date)
+    payload = api.call_stats_api(Endpoint.SCOREBOARD.value, params.to_api_dict())
+    df = api.resultset_to_df(payload, name=ResultSet.GAME_HEADER.value)
     if df.empty:
         return df
     df = utils.normalize_columns(df)
@@ -259,18 +239,9 @@ def load_box_score_summary(
     Returns:
         pd.DataFrame: One row with game summary (arena, officials, etc.).
     """
-    payload = api.call_stats_api(
-        "boxscoresummaryv2",
-        {
-            "GameID": str(game_id),
-            "StartPeriod": "0",
-            "EndPeriod": "14",
-            "StartRange": "0",
-            "EndRange": "2147483647",
-            "RangeType": "0",
-        },
-    )
-    df = api.resultset_to_df(payload, name="GameSummary")
+    params = BoxScoreParams(game_id=str(game_id))
+    payload = api.call_stats_api(Endpoint.BOX_SCORE_SUMMARY.value, params.to_api_dict())
+    df = api.resultset_to_df(payload, name=ResultSet.GAME_SUMMARY.value)
     if df.empty:
         return df
     df = utils.normalize_columns(df)
@@ -326,11 +297,9 @@ def load_common_player_info(player_id: int | str, season: str) -> pd.DataFrame:
     Returns:
         pd.DataFrame: One row with player bio.
     """
-    payload = api.call_stats_api(
-        "commonplayerinfo",
-        {"LeagueID": "00", "PlayerID": str(player_id)},
-    )
-    df = api.resultset_to_df(payload, name="CommonPlayerInfo")
+    params = CommonPlayerInfoParams(player_id=str(player_id))
+    payload = api.call_stats_api(Endpoint.COMMON_PLAYER_INFO.value, params.to_api_dict())
+    df = api.resultset_to_df(payload, name=ResultSet.COMMON_PLAYER_INFO.value)
     if df.empty:
         return df
     df = utils.normalize_columns(df)
@@ -432,7 +401,9 @@ async def _load_all_raw_async(
         on_flush(tables)
 
     # Phase 3: box + pbp
-    box_sum, box_adv, box_trad, playbyplay = await fetchers.fetch_box_and_pbp(one, to_df, ctx, team_logs)
+    box_sum, box_adv, box_trad, playbyplay = await fetchers.fetch_box_and_pbp(
+        one, to_df, ctx, team_logs
+    )
     tables["box_summaries"] = box_sum
     tables["box_advanced"] = box_adv
     tables["box_traditional"] = box_trad

@@ -19,3 +19,21 @@ sources:
         description: Game schedule metadata (arena, tip time) from scoreboardv2 GameHeader
       - name: box_summaries
         description: Game summary (arena, officials, attendance) from boxscoresummaryv2 GameSummary
+      - name: box_advanced
+        description: Advanced box score metrics per player per game from boxscoreadvancedv2
+      - name: box_traditional
+        description: Traditional box score per player per game from boxscoretraditionalv2
+      - name: playbyplay
+        description: Play-by-play events per game from playbyplayv2
+      - name: shot_charts
+        description: Shot chart detail (x,y, zone) per game per team from shotchartdetail
+      - name: common_team_years
+        description: Team year history from commonteamyears
+      - name: draft_history
+        description: Historical draft picks from drafthistory
+      - name: common_playoff_series
+        description: Playoff series structure and results from commonplayoffseries
+      - name: league_dash_lineups
+        description: League-wide 5-man lineup stats from leaguedashlineups
+      - name: team_dash_lineups
+        description: Per-team 5-man lineup stats from teamdashlineups

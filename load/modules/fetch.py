@@ -298,9 +298,7 @@ def load_box_score_summaries(
         log.warning("Cannot load box summaries: team_game_logs empty or missing game_id")
         return pd.DataFrame()
 
-    game_ids = (
-        team_game_logs["game_id"].dropna().astype(str).str.strip().unique().tolist()
-    )
+    game_ids = team_game_logs["game_id"].dropna().astype(str).str.strip().unique().tolist()
     log.info("Loading box score summaries for %d games", len(game_ids))
 
     frames: list[pd.DataFrame] = []
@@ -461,41 +459,47 @@ async def _load_all_raw_async(
         async def fetch_roster(row: Any) -> pd.DataFrame:
             team_id = int(row.team_id)
             team_abbrev = str(row.team_abbreviation)
-            p = await one(
-                "commonteamroster",
-                {"LeagueID": "00", "Season": season_label, "TeamID": str(team_id)},
-            )
-            df = to_df(p, name="CommonTeamRoster")
-            if df.empty:
+            try:
+                p = await one(
+                    "commonteamroster",
+                    {"LeagueID": "00", "Season": season_label, "TeamID": str(team_id)},
+                )
+                df = to_df(p, name="CommonTeamRoster")
+                if df.empty:
+                    return pd.DataFrame()
+                df = utils.normalize_columns(df)
+                df["team_id"] = team_id
+                df["team_abbreviation"] = team_abbrev
+                df["season"] = season
+                df["season_label"] = season_label
+                return df
+            except Exception as e:
+                log.warning("Skipping roster team_id=%s (%s): %s", team_id, team_abbrev, e)
                 return pd.DataFrame()
-            df = utils.normalize_columns(df)
-            df["team_id"] = team_id
-            df["team_abbreviation"] = team_abbrev
-            df["season"] = season
-            df["season_label"] = season_label
-            return df
 
         async def fetch_scoreboard(d: str) -> pd.DataFrame:
             api_date = _game_date_for_api(d)
-            p = await one(
-                "scoreboardv2",
-                {"LeagueID": "00", "GameDate": api_date, "DayOffset": "0"},
-            )
-            df = to_df(p, name="GameHeader")
-            if df.empty:
+            try:
+                p = await one(
+                    "scoreboardv2",
+                    {"LeagueID": "00", "GameDate": api_date, "DayOffset": "0"},
+                )
+                df = to_df(p, name="GameHeader")
+                if df.empty:
+                    return df
+                df = utils.normalize_columns(df)
+                df["game_date_api"] = api_date
+                df["season"] = season
+                df["season_type"] = season_type
                 return df
-            df = utils.normalize_columns(df)
-            df["game_date_api"] = api_date
-            df["season"] = season
-            df["season_type"] = season_type
-            return df
+            except Exception as e:
+                log.warning("Skipping scoreboard date=%s: %s", d, e)
+                return pd.DataFrame()
 
         roster_dfs = await asyncio.gather(
             *[fetch_roster(row) for row in teams.itertuples(index=False)]
         )
-        schedule_dfs = await asyncio.gather(
-            *[fetch_scoreboard(str(d)) for d in sorted(dates)]
-        )
+        schedule_dfs = await asyncio.gather(*[fetch_scoreboard(str(d)) for d in sorted(dates)])
 
         roster_list = [d for d in roster_dfs if not d.empty]
         schedule_list = [d for d in schedule_dfs if not d.empty]
@@ -509,30 +513,32 @@ async def _load_all_raw_async(
     if team_logs.empty or "game_id" not in team_logs.columns:
         box_summaries = pd.DataFrame()
     else:
-        game_ids = (
-            team_logs["game_id"].dropna().astype(str).str.strip().unique().tolist()
-        )
+        game_ids = team_logs["game_id"].dropna().astype(str).str.strip().unique().tolist()
         log.info("Loading box score summaries for %d games", len(game_ids))
 
         async def fetch_box(gid: str) -> pd.DataFrame:
-            p = await one(
-                "boxscoresummaryv2",
-                {
-                    "GameID": str(gid),
-                    "StartPeriod": "0",
-                    "EndPeriod": "14",
-                    "StartRange": "0",
-                    "EndRange": "2147483647",
-                    "RangeType": "0",
-                },
-            )
-            df = to_df(p, name="GameSummary")
-            if df.empty:
+            try:
+                p = await one(
+                    "boxscoresummaryv2",
+                    {
+                        "GameID": str(gid),
+                        "StartPeriod": "0",
+                        "EndPeriod": "14",
+                        "StartRange": "0",
+                        "EndRange": "2147483647",
+                        "RangeType": "0",
+                    },
+                )
+                df = to_df(p, name="GameSummary")
+                if df.empty:
+                    return df
+                df = utils.normalize_columns(df)
+                df["season"] = season
+                df["season_type"] = season_type
                 return df
-            df = utils.normalize_columns(df)
-            df["season"] = season
-            df["season_type"] = season_type
-            return df
+            except Exception as e:
+                log.warning("Skipping box summary game_id=%s: %s", gid, e)
+                return pd.DataFrame()
 
         box_dfs = await asyncio.gather(*[fetch_box(gid) for gid in game_ids])
         box_list = [d for d in box_dfs if not d.empty]
@@ -546,20 +552,22 @@ async def _load_all_raw_async(
         log.info("Loading player info for %d players", len(player_ids))
 
         async def fetch_player_info(pid: Any) -> pd.DataFrame:
-            p = await one(
-                "commonplayerinfo",
-                {"LeagueID": "00", "PlayerID": str(pid)},
-            )
-            df = to_df(p, name="CommonPlayerInfo")
-            if df.empty:
+            try:
+                p = await one(
+                    "commonplayerinfo",
+                    {"LeagueID": "00", "PlayerID": str(pid)},
+                )
+                df = to_df(p, name="CommonPlayerInfo")
+                if df.empty:
+                    return df
+                df = utils.normalize_columns(df)
+                df["season"] = season
                 return df
-            df = utils.normalize_columns(df)
-            df["season"] = season
-            return df
+            except Exception as e:
+                log.warning("Skipping player_info player_id=%s: %s", pid, e)
+                return pd.DataFrame()
 
-        player_dfs = await asyncio.gather(
-            *[fetch_player_info(pid) for pid in player_ids]
-        )
+        player_dfs = await asyncio.gather(*[fetch_player_info(pid) for pid in player_ids])
         player_list = [d for d in player_dfs if not d.empty]
         player_info = pd.concat(player_list, ignore_index=True) if player_list else pd.DataFrame()
         log.info("  player_info: %d rows", len(player_info))

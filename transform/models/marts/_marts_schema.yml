@@ -9,6 +9,16 @@ models:
       - name: player_name
         description: Display name
 
+  - name: dim_teams
+    description: Team dimension (one row per team with id, abbreviation, name)
+    columns:
+      - name: team_id
+        description: NBA team ID
+      - name: team_abbreviation
+        description: Team abbreviation (e.g. BOS, LAL)
+      - name: team_name
+        description: Team name (e.g. Celtics, Lakers)
+
   - name: dim_games
     description: Game dimension (one row per game with arena, teams, status)
     columns:

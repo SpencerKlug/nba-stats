@@ -7,6 +7,12 @@ models:
       - name: player_id
         description: NBA person/player ID
 
+  - name: int_teams
+    description: One row per team from team game logs
+    columns:
+      - name: team_id
+        description: NBA team ID
+
   - name: int_game_schedule
     description: Game dimension merging schedule with box summaries
     columns:

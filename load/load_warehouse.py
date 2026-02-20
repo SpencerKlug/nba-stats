@@ -79,6 +79,13 @@ def main() -> int:
         dest="skip_lineups",
         help="Do NOT skip lineup endpoints (may get 500 from NBA API)",
     )
+    parser.add_argument(
+        "--dataset",
+        choices=fetch.DATASETS,
+        default=None,
+        metavar="NAME",
+        help="Load only this dataset. Omit to load all datasets.",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -97,24 +104,38 @@ def main() -> int:
     )
     if args.limit is not None:
         log.info("TEST MODE: --limit=%d (restricting teams, dates, games, players per list)", args.limit)
+    if args.dataset is not None:
+        log.info("Single-dataset mode: loading only %s", args.dataset)
 
     con = warehouse.init_duckdb(args.db)
     try:
         for i, season in enumerate(seasons, 1):
             log.info("=== Season %s (%d/%d) ===", season, i, len(seasons))
 
-            def on_flush(tables: dict) -> None:
+            if args.dataset is not None:
+                tables = fetch.load_one_dataset(
+                    dataset=args.dataset,
+                    season=season,
+                    season_type=args.season_type,
+                    limit=args.limit,
+                    skip_lineups=args.skip_lineups,
+                )
                 warehouse.write_duckdb_for_season(
                     con, tables, season=season, season_type=args.season_type
                 )
+            else:
+                def on_flush(tables: dict) -> None:
+                    warehouse.write_duckdb_for_season(
+                        con, tables, season=season, season_type=args.season_type
+                    )
 
-            fetch.load_all_raw(
-                season=season,
-                season_type=args.season_type,
-                limit=args.limit,
-                skip_lineups=args.skip_lineups,
-                on_flush=on_flush,
-            )
+                fetch.load_all_raw(
+                    season=season,
+                    season_type=args.season_type,
+                    limit=args.limit,
+                    skip_lineups=args.skip_lineups,
+                    on_flush=on_flush,
+                )
     finally:
         con.close()
         log.info("DuckDB connection closed")

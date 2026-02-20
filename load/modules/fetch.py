@@ -445,6 +445,195 @@ async def _load_all_raw_async(
     return tables
 
 
+# --- Dataset registry and single-dataset loader ---
+
+DATASETS = [
+    "team_game_logs",
+    "player_game_logs",
+    "common_all_players",
+    "team_rosters",
+    "schedule",
+    "common_team_years",
+    "draft_history",
+    "common_playoff_series",
+    "league_dash_lineups",
+    "team_dash_lineups",
+    "box_summaries",
+    "box_advanced",
+    "box_traditional",
+    "playbyplay",
+    "shot_charts",
+    "player_info",
+]
+
+
+async def _load_one_dataset_async(
+    session: aiohttp.ClientSession,
+    semaphore: asyncio.Semaphore,
+    dataset: str,
+    season: str,
+    season_type: str = "Regular Season",
+    limit: int | None = None,
+    skip_lineups: bool = False,
+) -> dict[str, pd.DataFrame]:
+    """Load a single dataset. Fetches dependencies on-the-fly when required."""
+    from load.modules import fetchers
+
+    season_label = utils.season_to_label(season)
+    ctx = fetchers.FetchContext(
+        season=season,
+        season_label=season_label,
+        season_type=season_type,
+        limit=limit,
+        skip_lineups=skip_lineups,
+    )
+
+    async def one(endpoint: str, params: dict[str, str]) -> dict:
+        return await api.call_stats_api_async(session, semaphore, endpoint, params)
+
+    def to_df(payload: dict, name: str | None = None, index: int = 0) -> pd.DataFrame:
+        return api.resultset_to_df(payload, name=name, index=index)
+
+    log.info("Loading dataset=%s season=%s season_type=%s", dataset, season, season_type)
+
+    async def load_team_game_logs() -> dict[str, pd.DataFrame]:
+        team_logs, _, _ = await fetchers.fetch_core(one, to_df, ctx)
+        return {"team_game_logs": team_logs}
+
+    async def load_player_game_logs() -> dict[str, pd.DataFrame]:
+        _, player_logs, _ = await fetchers.fetch_core(one, to_df, ctx)
+        return {"player_game_logs": player_logs}
+
+    async def load_common_all_players() -> dict[str, pd.DataFrame]:
+        _, _, common = await fetchers.fetch_core(one, to_df, ctx)
+        return {"common_all_players": common}
+
+    async def load_team_rosters() -> dict[str, pd.DataFrame]:
+        team_logs, _, _ = await fetchers.fetch_core(one, to_df, ctx)
+        rosters, _ = await fetchers.fetch_rosters_schedule(one, to_df, ctx, team_logs)
+        return {"team_rosters": rosters}
+
+    async def load_schedule() -> dict[str, pd.DataFrame]:
+        team_logs, _, _ = await fetchers.fetch_core(one, to_df, ctx)
+        _, schedule = await fetchers.fetch_rosters_schedule(one, to_df, ctx, team_logs)
+        return {"schedule": schedule}
+
+    async def load_common_team_years() -> dict[str, pd.DataFrame]:
+        ct, _, _ = await fetchers.fetch_reference(one, to_df, ctx)
+        return {"common_team_years": ct}
+
+    async def load_draft_history() -> dict[str, pd.DataFrame]:
+        _, dh, _ = await fetchers.fetch_reference(one, to_df, ctx)
+        return {"draft_history": dh}
+
+    async def load_common_playoff_series() -> dict[str, pd.DataFrame]:
+        _, _, cps = await fetchers.fetch_reference(one, to_df, ctx)
+        return {"common_playoff_series": cps}
+
+    async def load_league_dash_lineups() -> dict[str, pd.DataFrame]:
+        league_lineups, _ = await fetchers.fetch_lineups(one, to_df, ctx, pd.DataFrame())
+        return {"league_dash_lineups": league_lineups}
+
+    async def load_team_dash_lineups() -> dict[str, pd.DataFrame]:
+        team_logs, _, _ = await fetchers.fetch_core(one, to_df, ctx)
+        _, team_lineups = await fetchers.fetch_lineups(one, to_df, ctx, team_logs)
+        return {"team_dash_lineups": team_lineups}
+
+    async def load_box_summaries() -> dict[str, pd.DataFrame]:
+        team_logs, _, _ = await fetchers.fetch_core(one, to_df, ctx)
+        box_sum, _, _, _ = await fetchers.fetch_box_and_pbp(one, to_df, ctx, team_logs)
+        return {"box_summaries": box_sum}
+
+    async def load_box_advanced() -> dict[str, pd.DataFrame]:
+        team_logs, _, _ = await fetchers.fetch_core(one, to_df, ctx)
+        _, box_adv, _, _ = await fetchers.fetch_box_and_pbp(one, to_df, ctx, team_logs)
+        return {"box_advanced": box_adv}
+
+    async def load_box_traditional() -> dict[str, pd.DataFrame]:
+        team_logs, _, _ = await fetchers.fetch_core(one, to_df, ctx)
+        _, _, box_trad, _ = await fetchers.fetch_box_and_pbp(one, to_df, ctx, team_logs)
+        return {"box_traditional": box_trad}
+
+    async def load_playbyplay() -> dict[str, pd.DataFrame]:
+        team_logs, _, _ = await fetchers.fetch_core(one, to_df, ctx)
+        _, _, _, pbp = await fetchers.fetch_box_and_pbp(one, to_df, ctx, team_logs)
+        return {"playbyplay": pbp}
+
+    async def load_shot_charts() -> dict[str, pd.DataFrame]:
+        team_logs, _, _ = await fetchers.fetch_core(one, to_df, ctx)
+        box_sum, _, _, _ = await fetchers.fetch_box_and_pbp(one, to_df, ctx, team_logs)
+        shot_charts = await fetchers.fetch_shot_charts(one, to_df, ctx, box_sum)
+        return {"shot_charts": shot_charts}
+
+    async def load_player_info() -> dict[str, pd.DataFrame]:
+        _, _, common_players = await fetchers.fetch_core(one, to_df, ctx)
+        player_info = await fetchers.fetch_player_info(one, to_df, ctx, common_players)
+        return {"player_info": player_info}
+
+    loaders: dict[str, Callable[..., object]] = {
+        "team_game_logs": load_team_game_logs,
+        "player_game_logs": load_player_game_logs,
+        "common_all_players": load_common_all_players,
+        "team_rosters": load_team_rosters,
+        "schedule": load_schedule,
+        "common_team_years": load_common_team_years,
+        "draft_history": load_draft_history,
+        "common_playoff_series": load_common_playoff_series,
+        "league_dash_lineups": load_league_dash_lineups,
+        "team_dash_lineups": load_team_dash_lineups,
+        "box_summaries": load_box_summaries,
+        "box_advanced": load_box_advanced,
+        "box_traditional": load_box_traditional,
+        "playbyplay": load_playbyplay,
+        "shot_charts": load_shot_charts,
+        "player_info": load_player_info,
+    }
+    loader = loaders.get(dataset)
+    if loader is None:
+        raise ValueError(f"Unknown dataset: {dataset}")
+    return await loader()
+
+
+def load_one_dataset(
+    dataset: str,
+    season: str,
+    season_type: str = "Regular Season",
+    limit: int | None = None,
+    skip_lineups: bool = False,
+) -> dict[str, pd.DataFrame]:
+    """Load a single dataset from the NBA stats API.
+
+    Args:
+        dataset: One of DATASETS (e.g. team_game_logs, box_summaries).
+        season: Season year (e.g. 2026 for 2025-26).
+        season_type: NBA API season type.
+        limit: Test mode: cap per-list API calls.
+        skip_lineups: Skip lineup endpoints (used when dataset is a lineup type).
+
+    Returns:
+        dict with one key (the dataset name) and its DataFrame.
+    """
+    if dataset not in DATASETS:
+        raise ValueError(f"Unknown dataset: {dataset}. Valid: {DATASETS}")
+    semaphore = asyncio.Semaphore(api.CONCURRENT_REQUESTS)
+    headers = {**api.STATS_HEADERS}
+    headers["Connection"] = "keep-alive"
+
+    async def run() -> dict[str, pd.DataFrame]:
+        async with aiohttp.ClientSession(headers=headers) as session:
+            return await _load_one_dataset_async(
+                session,
+                semaphore,
+                dataset,
+                season,
+                season_type=season_type,
+                limit=limit,
+                skip_lineups=skip_lineups,
+            )
+
+    return asyncio.run(run())
+
+
 # Orchestration delegates to fetchers.py
 
 

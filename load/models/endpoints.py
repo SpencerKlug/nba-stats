@@ -125,6 +125,8 @@ class DraftHistoryParams(BaseModel):
 
 
 class CommonPlayoffSeriesParams(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     league_id: str = Field(default=LEAGUE_ID_NBA, alias="LeagueID")
     season: str = Field(..., alias="Season")
 

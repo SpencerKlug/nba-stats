@@ -19,19 +19,17 @@ log = logging.getLogger(__name__)
 
 STATS_BASE_URL = "https://stats.nba.com/stats"
 STATS_HEADERS = {
-    "Host": "stats.nba.com",
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
-    ),
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.9",
+    "accept": "*/*",
     "Accept-Encoding": "gzip, deflate, br",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:147.0) Gecko/20100101 Firefox/147.0",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.nba.com/",
+    "Origin": "https://www.nba.com",
     "Connection": "keep-alive",
-    "Referer": "https://stats.nba.com/",
-    "Origin": "https://stats.nba.com",
-    "Pragma": "no-cache",
-    "Cache-Control": "no-cache",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-site",
+    "Priority": "u=4",
 }
 
 RETRY_STATUS_CODES = {429, 500, 502, 503, 504}

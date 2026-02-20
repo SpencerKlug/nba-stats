@@ -9,7 +9,6 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # --- Endpoint paths ---
 
 
@@ -80,6 +79,8 @@ class LeagueGameLogParams(BaseModel):
 
 
 class CommonAllPlayersParams(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     league_id: str = Field(default=LEAGUE_ID_NBA, alias="LeagueID")
     season: str = Field(..., alias="Season")
     is_only_current_season: str = Field(default="1", alias="IsOnlyCurrentSeason")
@@ -98,7 +99,11 @@ class CommonTeamRosterParams(BaseModel):
     team_id: str = Field(..., alias="TeamID")
 
     def to_api_dict(self) -> dict[str, str]:
-        return {"LeagueID": self.league_id, "Season": self.season, "TeamID": self.team_id}
+        return {
+            "LeagueID": self.league_id,
+            "Season": self.season,
+            "TeamID": self.team_id,
+        }
 
 
 class ScoreboardParams(BaseModel):
@@ -107,7 +112,11 @@ class ScoreboardParams(BaseModel):
     day_offset: str = Field(default="0", alias="DayOffset")
 
     def to_api_dict(self) -> dict[str, str]:
-        return {"LeagueID": self.league_id, "GameDate": self.game_date, "DayOffset": self.day_offset}
+        return {
+            "LeagueID": self.league_id,
+            "GameDate": self.game_date,
+            "DayOffset": self.day_offset,
+        }
 
 
 class CommonTeamYearsParams(BaseModel):
@@ -195,7 +204,11 @@ class PlayByPlayParams(BaseModel):
     end_period: str = Field(default="14", alias="EndPeriod")
 
     def to_api_dict(self) -> dict[str, str]:
-        return {"GameID": self.game_id, "StartPeriod": self.start_period, "EndPeriod": self.end_period}
+        return {
+            "GameID": self.game_id,
+            "StartPeriod": self.start_period,
+            "EndPeriod": self.end_period,
+        }
 
 
 class ShotChartParams(BaseModel):

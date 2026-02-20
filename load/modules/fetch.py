@@ -634,9 +634,6 @@ def load_one_dataset(
     return asyncio.run(run())
 
 
-# Orchestration delegates to fetchers.py
-
-
 def load_all_raw(
     season: str,
     season_type: str = "Regular Season",

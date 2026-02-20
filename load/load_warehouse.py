@@ -30,8 +30,12 @@ def main() -> int:
     Returns:
         int: Exit code (0 on success).
     """
-    parser = argparse.ArgumentParser(description="Load raw NBA data into DuckDB (+ optional S3)")
-    parser.add_argument("--season", default="2026", help="Season year (e.g. 2026 for 2025-26)")
+    parser = argparse.ArgumentParser(
+        description="Load raw NBA data into DuckDB (+ optional S3)"
+    )
+    parser.add_argument(
+        "--season", default="2026", help="Season year (e.g. 2026 for 2025-26)"
+    )
     parser.add_argument(
         "--start-season",
         default=None,
@@ -59,7 +63,9 @@ def main() -> int:
         default=os.environ.get("NBA_S3_PREFIX", "nba"),
         help="S3 key prefix",
     )
-    parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Enable debug logging"
+    )
     parser.add_argument(
         "--limit",
         type=int,
@@ -103,7 +109,10 @@ def main() -> int:
         args.season_type,
     )
     if args.limit is not None:
-        log.info("TEST MODE: --limit=%d (restricting teams, dates, games, players per list)", args.limit)
+        log.info(
+            "TEST MODE: --limit=%d (restricting teams, dates, games, players per list)",
+            args.limit,
+        )
     if args.dataset is not None:
         log.info("Single-dataset mode: loading only %s", args.dataset)
 
@@ -124,6 +133,7 @@ def main() -> int:
                     con, tables, season=season, season_type=args.season_type
                 )
             else:
+
                 def on_flush(tables: dict) -> None:
                     warehouse.write_duckdb_for_season(
                         con, tables, season=season, season_type=args.season_type

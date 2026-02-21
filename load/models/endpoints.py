@@ -16,7 +16,7 @@ class Endpoint(str, Enum):
     LEAGUE_GAME_LOG = "leaguegamelog"
     COMMON_ALL_PLAYERS = "commonallplayers"
     COMMON_TEAM_ROSTER = "commonteamroster"
-    SCOREBOARD = "scoreboardv2"
+    SCOREBOARD = "scoreboardv3"
     COMMON_TEAM_YEARS = "commonteamyears"
     DRAFT_HISTORY = "drafthistory"
     COMMON_PLAYOFF_SERIES = "commonplayoffseries"
@@ -25,7 +25,7 @@ class Endpoint(str, Enum):
     BOX_SCORE_SUMMARY = "boxscoresummaryv2"
     BOX_SCORE_ADVANCED = "boxscoreadvancedv2"
     BOX_SCORE_TRADITIONAL = "boxscoretraditionalv2"
-    PLAY_BY_PLAY = "playbyplayv2"
+    PLAY_BY_PLAY = "playbyplayv3"
     SHOT_CHART = "shotchartdetail"
     COMMON_PLAYER_INFO = "commonplayerinfo"
 
@@ -94,6 +94,8 @@ class CommonAllPlayersParams(BaseModel):
 
 
 class CommonTeamRosterParams(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     league_id: str = Field(default=LEAGUE_ID_NBA, alias="LeagueID")
     season: str = Field(..., alias="Season")
     team_id: str = Field(..., alias="TeamID")
@@ -107,6 +109,8 @@ class CommonTeamRosterParams(BaseModel):
 
 
 class ScoreboardParams(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     league_id: str = Field(default=LEAGUE_ID_NBA, alias="LeagueID")
     game_date: str = Field(..., alias="GameDate")
     day_offset: str = Field(default="0", alias="DayOffset")
@@ -120,6 +124,8 @@ class ScoreboardParams(BaseModel):
 
 
 class CommonTeamYearsParams(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     league_id: str = Field(default=LEAGUE_ID_NBA, alias="LeagueID")
 
     def to_api_dict(self) -> dict[str, str]:
@@ -127,6 +133,8 @@ class CommonTeamYearsParams(BaseModel):
 
 
 class DraftHistoryParams(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     league_id: str = Field(default=LEAGUE_ID_NBA, alias="LeagueID")
 
     def to_api_dict(self) -> dict[str, str]:
@@ -144,6 +152,8 @@ class CommonPlayoffSeriesParams(BaseModel):
 
 
 class LeagueDashLineupsParams(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     league_id: str = Field(default=LEAGUE_ID_NBA, alias="LeagueID")
     season: str = Field(..., alias="Season")
     season_type: str = Field(..., alias="SeasonType")
@@ -163,6 +173,8 @@ class LeagueDashLineupsParams(BaseModel):
 
 
 class TeamDashLineupsParams(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     league_id: str = Field(default=LEAGUE_ID_NBA, alias="LeagueID")
     season: str = Field(..., alias="Season")
     season_type: str = Field(..., alias="SeasonType")
@@ -180,6 +192,8 @@ class TeamDashLineupsParams(BaseModel):
 
 
 class BoxScoreParams(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     game_id: str = Field(..., alias="GameID")
     start_period: str = Field(default="0", alias="StartPeriod")
     end_period: str = Field(default="14", alias="EndPeriod")
@@ -199,6 +213,8 @@ class BoxScoreParams(BaseModel):
 
 
 class PlayByPlayParams(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     game_id: str = Field(..., alias="GameID")
     start_period: str = Field(default="0", alias="StartPeriod")
     end_period: str = Field(default="14", alias="EndPeriod")
@@ -212,6 +228,8 @@ class PlayByPlayParams(BaseModel):
 
 
 class ShotChartParams(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     league_id: str = Field(default=LEAGUE_ID_NBA, alias="LeagueID")
     season: str = Field(..., alias="Season")
     season_type: str = Field(..., alias="SeasonType")
@@ -229,6 +247,8 @@ class ShotChartParams(BaseModel):
 
 
 class CommonPlayerInfoParams(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     league_id: str = Field(default=LEAGUE_ID_NBA, alias="LeagueID")
     player_id: str = Field(..., alias="PlayerID")
 

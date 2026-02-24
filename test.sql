@@ -3,6 +3,7 @@ from raw.team_rosters
 where school ilike '%Gonzaga%'
 group by player_id, player
 ;
+
 select *
 from raw.team_game_logs;
 
@@ -24,6 +25,5 @@ left join main_intermediate.int_teams as t2
 ;
 
 select *
-from raw.
-where player_name like '%Scoot%'
+from main_marts.dim_players;
 ;

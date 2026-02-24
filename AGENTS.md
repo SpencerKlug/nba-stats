@@ -10,6 +10,7 @@ NBA Stats ELT pipeline: Python loads raw data from `stats.nba.com` API into Duck
 |---|---|---|
 | **Load (Python)** | `python3 -m load.load_warehouse --season 2026` | Requires internet access to `stats.nba.com`; use `--limit N` for test mode |
 | **Transform (dbt)** | `DBT_PROFILES_DIR=transform dbt run --project-dir transform` | Requires `warehouse.duckdb` with raw data; run `dbt deps` first |
+| **Ask (Q&A agent)** | `python3 -m ask "Who leads in scoring?"` | Requires `OPENAI_API_KEY`; omit question arg for interactive REPL |
 
 ### Key caveats
 - The `stats.nba.com` API is rate-limited and may timeout from cloud/CI environments. Use `--limit 2` for minimal test runs. If the API is unreachable, you can seed mock data directly into DuckDB under the `raw` schema (tables: `team_game_logs`, `player_game_logs`, `team_rosters`, `common_all_players`, `player_info`, `schedule`, `box_summaries`).

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import sys
 import textwrap
 
 import duckdb
@@ -62,6 +64,13 @@ class NBAStatsAgent:
         db_path: str = "warehouse.duckdb",
         model: str = "gpt-4o-mini",
     ) -> None:
+        if not os.environ.get("OPENAI_API_KEY"):
+            print(
+                "Error: OPENAI_API_KEY environment variable is not set.\n"
+                "Set it with:  export OPENAI_API_KEY='sk-...'"
+            )
+            sys.exit(1)
+
         self.con = duckdb.connect(db_path, read_only=True)
         self.client = OpenAI()
         self.model = model

@@ -25,5 +25,5 @@ left join main_intermediate.int_teams as t2
 ;
 
 select *
-from main_marts.dim_players;
+from main_marts.fact_player_per_game;
 ;

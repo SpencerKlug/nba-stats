@@ -1,0 +1,4 @@
+# MCP server for "talk to your data" (ChatGPT connector).
+# Install with: pip install -r requirements.txt -r requirements-mcp.txt
+# DuckDB is in requirements.txt; this adds FastMCP (Streamable HTTP transport).
+fastmcp>=2.3.0

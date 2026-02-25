@@ -86,6 +86,13 @@ SELECT * FROM marts.fact_standings ORDER BY conference, conf_rank;
 SELECT * FROM marts.fact_player_per_game WHERE season = '2026' ORDER BY pts DESC LIMIT 10;
 ```
 
+### 5. Talk to your data (ChatGPT + MCP)
+
+An MCP server lets you query the warehouse from **ChatGPT** via natural language. See [docs/talk-to-your-data.md](docs/talk-to-your-data.md) for:
+
+- Installing MCP deps (`requirements-mcp.txt`), running the server (`python -m mcp_server`), and optional `DUCKDB_PATH`.
+- Exposing the server with ngrok and registering it as a ChatGPT Connector.
+
 ## Saving data in AWS
 
 - **Option A – Load exports to S3**: Use `--s3-bucket` and `--s3-prefix` (or `NBA_S3_BUCKET` / `NBA_S3_PREFIX`). Load writes Parquet files to `s3://<bucket>/<prefix>/raw/<table>.parquet`. You can then attach S3 in DuckDB and run dbt against those paths (e.g. by changing the DuckDB path in the profile to a DB that reads from S3).
@@ -112,8 +119,11 @@ nba-stats/
 │       ├── sources.yml     # raw.team_game_logs, raw.player_game_logs, raw.team_rosters
 │       ├── staging/
 │       └── marts/
+├── mcp_server/             # MCP server for ChatGPT (talk to your data)
+├── docs/talk-to-your-data.md
 ├── warehouse.duckdb        # Created by load (path configurable)
-└── requirements.txt
+├── requirements.txt
+└── requirements-mcp.txt   # FastMCP for MCP server
 ```
 
 ## Notes

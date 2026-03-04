@@ -57,7 +57,7 @@ def upsert_raw_table(
     table_name: str,
     df: pd.DataFrame,
     season: str,
-    season_type: str,
+    season_type: str | None = None,
 ) -> None:
     """Create table or upsert season-level rows (idempotent for backfill reruns).
 
@@ -66,10 +66,7 @@ def upsert_raw_table(
         table_name (str): Raw table name (e.g. team_game_logs).
         df (pd.DataFrame): Data to write.
         season (str): Season year (e.g. 2026).
-        season_type (str): NBA API season type (e.g. Regular Season).
-
-    Returns:
-        None
+        season_type (str | None): NBA API season type (e.g. Regular Season). None for NCAA tables.
     """
     if df.empty:
         log.debug("Skipping empty table: %s", table_name)
@@ -88,7 +85,7 @@ def upsert_raw_table(
     con.register("_df", aligned)
 
     # Idempotent season-level overwrite for reruns/backfills.
-    if "season" in existing_cols and "season_type" in existing_cols:
+    if "season" in existing_cols and "season_type" in existing_cols and season_type is not None:
         con.execute(
             f"DELETE FROM {fq_table} WHERE season = ? AND season_type = ?",
             [season, season_type],
@@ -106,7 +103,7 @@ def write_duckdb_for_season(
     con: duckdb.DuckDBPyConnection,
     tables: dict[str, pd.DataFrame],
     season: str,
-    season_type: str,
+    season_type: str | None = None,
 ) -> None:
     """Write one season's raw tables into DuckDB (upsert per table).
 
@@ -114,10 +111,7 @@ def write_duckdb_for_season(
         con (duckdb.DuckDBPyConnection): DuckDB connection.
         tables (dict[str, pd.DataFrame]): Raw tables (team_game_logs, player_game_logs, team_rosters).
         season (str): Season year (e.g. 2026).
-        season_type (str): NBA API season type.
-
-    Returns:
-        None
+        season_type (str | None): NBA API season type. Pass None for NCAA data.
     """
     log.info("Writing season=%s season_type=%s to DuckDB", season, season_type)
     for name, df in tables.items():

@@ -27,3 +27,6 @@ left join main_intermediate.int_teams as t2
 select *
 from main_marts.fact_player_per_game;
 ;
+
+select *
+from raw.ncaa_schedule;

@@ -21,33 +21,6 @@ def _academic_year_from_season(season: str) -> str:
     return str(int(season))
 
 
-def load_rankings(
-    season: str,
-    division: str = ncaa_client.DIVISION_I,
-    sport_code: str = ncaa_client.SPORT_CODE_MBB,
-) -> dict[str, pd.DataFrame]:
-    """Load rankings page and return all stat tables as DataFrames."""
-    academic_year = _academic_year_from_season(season)
-    log.info("Loading NCAA rankings season=%s division=%s sport=%s", season, division, sport_code)
-    html = ncaa_client.get_rankings_page(
-        division=division,
-        sport_code=sport_code,
-        academic_year=academic_year,
-    )
-    tables = ncaa_client.rankings_tables_to_dfs(html)
-    out: dict[str, pd.DataFrame] = {}
-    for name, df in tables.items():
-        if df.empty:
-            continue
-        df = utils.normalize_columns(df)
-        df["season"] = season
-        df["division"] = division
-        df["sport_code"] = sport_code
-        out[name] = df
-    log.info("  rankings: %d tables", len(out))
-    return out
-
-
 def load_team_list(
     season: str,
     division: str = ncaa_client.DIVISION_I,
@@ -73,18 +46,6 @@ def load_team_list(
         df["org_id"] = df["team_href"].str.extract(r"org_id=(\d+)", expand=False)
     log.info("  team_list: %d rows", len(df))
     return df
-
-
-def load_team_rankings_single_table(
-    season: str,
-    division: str = ncaa_client.DIVISION_I,
-    sport_code: str = ncaa_client.SPORT_CODE_MBB,
-) -> pd.DataFrame:
-    """Load the first/main rankings table from the rankings page as one DataFrame."""
-    tables = load_rankings(season=season, division=division, sport_code=sport_code)
-    if not tables:
-        return pd.DataFrame()
-    return tables[next(iter(tables))]
 
 
 def load_game_list(
@@ -188,7 +149,6 @@ def load_ncaa_mbb_season(
     season: str,
     division: str = ncaa_client.DIVISION_I,
     include_team_list: bool = True,
-    include_rankings: bool = True,
     include_games: bool = True,
     include_box_scores: bool = True,
     use_team_schedules: bool = False,
@@ -201,11 +161,6 @@ def load_ncaa_mbb_season(
         team_list = load_team_list(season=season, division=division)
         if not team_list.empty:
             result["ncaa_team_list"] = team_list
-
-    if include_rankings:
-        rankings = load_rankings(season=season, division=division)
-        for name, df in rankings.items():
-            result[name] = df
 
     if include_games or include_box_scores:
         games_df, contest_ids = load_game_list(

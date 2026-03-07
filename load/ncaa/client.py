@@ -6,7 +6,6 @@ no public JSON API.
 
 Page-specific logic lives in:
   - core: session, HTTP, table/link helpers, constants
-  - rankings: /rankings
   - team_list: /team/inst_team_list
   - team_season: /team/index (schedule)
   - roster: /team/roster
@@ -16,7 +15,7 @@ Page-specific logic lives in:
 
 from __future__ import annotations
 
-from load.ncaa import box_score, core, rankings, roster, scoreboard, team_list, team_season
+from load.ncaa import box_score, core, roster, scoreboard, team_list, team_season
 
 # Constants
 NCAA_BASE = core.NCAA_BASE
@@ -24,10 +23,6 @@ NCAA_HEADERS = core.NCAA_HEADERS
 SPORT_CODE_MBB = core.SPORT_CODE_MBB
 DIVISION_I = core.DIVISION_I
 REQUEST_DELAY_SECONDS = core.REQUEST_DELAY_SECONDS
-
-# Rankings
-get_rankings_page = rankings.get_rankings_page
-rankings_tables_to_dfs = rankings.rankings_tables_to_dfs
 
 # Team list
 get_team_list_page = team_list.get_team_list_page
@@ -62,8 +57,6 @@ __all__ = [
     "SPORT_CODE_MBB",
     "DIVISION_I",
     "REQUEST_DELAY_SECONDS",
-    "get_rankings_page",
-    "rankings_tables_to_dfs",
     "get_team_list_page",
     "parse_team_list_html",
     "get_team_season_page",

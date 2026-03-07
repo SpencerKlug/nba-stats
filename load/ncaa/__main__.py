@@ -28,7 +28,6 @@ def main() -> int:
     parser.add_argument("--end-season", default=None, help="Backfill end. Use with --start-season.")
     parser.add_argument("--db", default="warehouse.duckdb", help="Path to DuckDB file")
     parser.add_argument("--skip-team-list", action="store_true", help="Do not fetch team list")
-    parser.add_argument("--skip-rankings", action="store_true", help="Do not fetch rankings tables")
     parser.add_argument("--skip-games", action="store_true", help="Do not fetch game schedule")
     parser.add_argument("--skip-box-scores", action="store_true", help="Do not fetch player box scores")
     parser.add_argument("--use-team-schedules", action="store_true", help="Use team schedules (fallback)")
@@ -52,7 +51,6 @@ def main() -> int:
             tables = ncaa_fetch.load_ncaa_mbb_season(
                 season=season,
                 include_team_list=not args.skip_team_list,
-                include_rankings=not args.skip_rankings,
                 include_games=not args.skip_games,
                 include_box_scores=not args.skip_box_scores,
                 use_team_schedules=args.use_team_schedules,

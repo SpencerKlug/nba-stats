@@ -1,4 +1,4 @@
-"""DuckDB warehouse: bronze (raw by source), silver (by domain), gold (aggregates)."""
+"""DuckDB warehouse: three separate databases (bronze, silver, gold)."""
 
 from __future__ import annotations
 
@@ -13,30 +13,63 @@ from load.modules import utils
 
 log = logging.getLogger(__name__)
 
-# Bronze = raw data, one schema per source. Silver = by domain. Gold = aggregates.
+# Bronze = raw data, one schema per source (nba, ncaa). Silver/gold = separate DB files.
 BRONZE_SOURCES = ("nba", "ncaa")
 Source = Literal["nba", "ncaa"]
 
 
-def init_duckdb(db_path: str) -> duckdb.DuckDBPyConnection:
-    """Initialize DuckDB and create medallion schemas.
+def _bronze_path(db_path: str) -> Path:
+    """Path to the bronze database file (raw data by source)."""
+    p = Path(db_path)
+    if p.suffix != ".duckdb":
+        p = p / "bronze.duckdb"
+    return p.parent / "bronze.duckdb" if p.name != "bronze.duckdb" else p
 
-    - bronze_nba, bronze_ncaa: raw data by source system
-    - silver: curated data by domain (teams, games, etc.)
-    - gold: aggregates and pre-defined metrics
+
+def _warehouse_dir(db_path: str) -> Path:
+    """Directory containing bronze.duckdb, silver.duckdb, gold.duckdb."""
+    return _bronze_path(db_path).parent
+
+
+def _silver_path(db_path: str) -> Path:
+    """Path to the silver database file (by domain)."""
+    return _warehouse_dir(db_path) / "silver.duckdb"
+
+
+def _gold_path(db_path: str) -> Path:
+    """Path to the gold database file (aggregates)."""
+    return _warehouse_dir(db_path) / "gold.duckdb"
+
+
+def init_duckdb(db_path: str) -> duckdb.DuckDBPyConnection:
+    """Open the bronze database and ensure schemas nba, ncaa exist.
+
+    Three separate database files live in the same directory as db_path:
+    - bronze.duckdb: raw data with schemas nba, ncaa
+    - silver.duckdb: curated by domain (created empty if missing)
+    - gold.duckdb: aggregates (created empty if missing)
 
     Args:
-        db_path (str): Path to DuckDB file.
+        db_path: Path to the bronze database (e.g. bronze.duckdb) or any path
+                 in the target directory; bronze/silver/gold will be used.
 
     Returns:
-        duckdb.DuckDBPyConnection: Open connection.
+        Open connection to the bronze database.
     """
-    path = Path(db_path)
+    path = _bronze_path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    log.info("Opening DuckDB: %s", path)
+    log.info("Opening bronze DuckDB: %s", path)
     con = duckdb.connect(str(path))
-    for schema in ("bronze_nba", "bronze_ncaa", "silver", "gold"):
+    for schema in BRONZE_SOURCES:
         con.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    # Ensure silver and gold DB files exist (empty) so all three DBs are present
+    for name, fn in (("silver", _silver_path), ("gold", _gold_path)):
+        p = fn(db_path)
+        if not p.exists():
+            c = duckdb.connect(str(p))
+            c.execute("CREATE SCHEMA IF NOT EXISTS main")
+            c.close()
+            log.info("Created empty %s database: %s", name, p)
     return con
 
 
@@ -61,11 +94,11 @@ def upsert_bronze_table(
     season: str,
     season_type: str | None = None,
 ) -> None:
-    """Create or upsert season-level rows in the bronze schema for the given source.
+    """Create or upsert season-level rows in the bronze DB under schema nba or ncaa.
 
     Args:
-        con: DuckDB connection.
-        source: Source system ('nba' or 'ncaa'); determines schema bronze_nba or bronze_ncaa.
+        con: DuckDB connection (to bronze.duckdb).
+        source: 'nba' or 'ncaa'; data is written to schema nba or ncaa.
         table_name: Table name (e.g. team_game_logs, ncaa_team_list).
         df: Data to write.
         season: Season year (e.g. 2026).
@@ -75,9 +108,8 @@ def upsert_bronze_table(
         log.debug("Skipping empty table: %s.%s", source, table_name)
         return
 
-    schema = f"bronze_{source}"
-    fq_table = f"{schema}.{table_name}"
-    if not table_exists(con, schema, table_name):
+    fq_table = f"{source}.{table_name}"
+    if not table_exists(con, source, table_name):
         con.register("_df", df)
         con.execute(f"CREATE TABLE {fq_table} AS SELECT * FROM _df")
         con.unregister("_df")
@@ -110,15 +142,15 @@ def write_duckdb_for_season(
     source: Source,
     season_type: str | None = None,
 ) -> None:
-    """Write one season's raw tables into the bronze layer (schema by source).
+    """Write one season's raw tables into the bronze database (schema nba or ncaa).
 
     Args:
-        con: DuckDB connection.
+        con: DuckDB connection (bronze.duckdb).
         tables: Raw tables keyed by name (e.g. team_game_logs, ncaa_team_list).
         season: Season year (e.g. 2026).
-        source: 'nba' or 'ncaa'; data is written to bronze_nba or bronze_ncaa.
+        source: 'nba' or 'ncaa'; data is written to that schema in the bronze DB.
         season_type: NBA API season type. Pass None for NCAA.
     """
-    log.info("Writing season=%s source=%s season_type=%s to DuckDB", season, source, season_type)
+    log.info("Writing season=%s source=%s season_type=%s to bronze DuckDB", season, source, season_type)
     for name, df in tables.items():
         upsert_bronze_table(con, source, name, df, season=season, season_type=season_type)

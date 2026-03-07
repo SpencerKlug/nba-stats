@@ -26,7 +26,7 @@ def main() -> int:
     parser.add_argument("--season", default="2026", help="Season end year (e.g. 2026 for 2025-26)")
     parser.add_argument("--start-season", default=None, help="Backfill start. Use with --end-season.")
     parser.add_argument("--end-season", default=None, help="Backfill end. Use with --start-season.")
-    parser.add_argument("--db", default="warehouse.duckdb", help="Path to DuckDB file")
+    parser.add_argument("--db", default="bronze.duckdb", help="Path to bronze DuckDB (or dir containing bronze/silver/gold.duckdb)")
     parser.add_argument("--skip-team-list", action="store_true", help="Do not fetch team list")
     parser.add_argument("--skip-games", action="store_true", help="Do not fetch game schedule")
     parser.add_argument("--skip-box-scores", action="store_true", help="Do not fetch player box scores")

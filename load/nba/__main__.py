@@ -32,7 +32,7 @@ def main() -> int:
         choices=["Regular Season", "Playoffs", "Pre Season", "All Star"],
         help="NBA API season type",
     )
-    parser.add_argument("--db", default="warehouse.duckdb", help="Path to DuckDB file")
+    parser.add_argument("--db", default="bronze.duckdb", help="Path to bronze DuckDB (or dir containing bronze/silver/gold.duckdb)")
     parser.add_argument("--s3-bucket", default=os.environ.get("NBA_S3_BUCKET"), help="S3 bucket")
     parser.add_argument("--s3-prefix", default=os.environ.get("NBA_S3_PREFIX", "nba"), help="S3 prefix")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")

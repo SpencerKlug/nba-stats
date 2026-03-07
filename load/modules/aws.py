@@ -8,14 +8,14 @@ import duckdb
 
 log = logging.getLogger(__name__)
 
-BRONZE_SCHEMAS = ("bronze_nba", "bronze_ncaa")
+BRONZE_SCHEMAS = ("nba", "ncaa")
 
 
 def export_to_s3(db_path: str, bucket: str, prefix: str) -> None:
-    """Export bronze schema tables from DuckDB to S3 as Parquet (requires httpfs).
+    """Export bronze database (schemas nba, ncaa) to S3 as Parquet (requires httpfs).
 
-    Each source (bronze_nba, bronze_ncaa) is exported under prefix/bronze_nba/
-    and prefix/bronze_ncaa/ with one Parquet file per table.
+    Each source schema is exported under prefix/nba/ and prefix/ncaa/
+    with one Parquet file per table.
 
     Args:
         db_path: Path to DuckDB file.
@@ -26,7 +26,9 @@ def export_to_s3(db_path: str, bucket: str, prefix: str) -> None:
         None
     """
     log.info("Exporting to S3 (bucket=%s, prefix=%s)...", bucket, prefix)
-    con = duckdb.connect(str(db_path))
+    from load.modules.warehouse import _bronze_path
+    bronze_path = _bronze_path(db_path)
+    con = duckdb.connect(str(bronze_path))
     con.execute("INSTALL httpfs; LOAD httpfs;")
     con.execute("SET s3_region = 'us-east-1';")
     base = prefix.rstrip("/")

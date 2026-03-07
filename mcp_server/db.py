@@ -8,15 +8,15 @@ from collections import defaultdict
 
 import duckdb
 
-# Medallion: bronze by source, silver by domain, gold aggregates
-ALLOWED_SCHEMAS = frozenset({"bronze_nba", "bronze_ncaa", "silver", "gold"})
+# Bronze DB has schemas nba, ncaa. Silver/gold are separate DBs (no schema allowlist for now).
+ALLOWED_SCHEMAS = frozenset({"nba", "ncaa"})
 
 DEFAULT_ROW_LIMIT = 100
 
 
 def get_duckdb_path() -> str:
-    """Return DuckDB path from DUCKDB_PATH env or default warehouse.duckdb (repo root)."""
-    path = os.environ.get("DUCKDB_PATH", "warehouse.duckdb")
+    """Return path to bronze DuckDB from DUCKDB_PATH env or default bronze.duckdb (repo root)."""
+    path = os.environ.get("DUCKDB_PATH", "bronze.duckdb")
     if not os.path.isabs(path):
         # Resolve relative to cwd (assume run from repo root)
         path = os.path.abspath(path)
@@ -95,12 +95,12 @@ def list_tables_and_columns() -> str:
             """
             SELECT table_schema, table_name, column_name, data_type
             FROM information_schema.columns
-            WHERE table_schema IN ('bronze_nba','bronze_ncaa','silver','gold')
+            WHERE table_schema IN ('nba','ncaa')
             ORDER BY table_schema, table_name, ordinal_position
             """
         ).fetchall()
         if not out:
-            return "No tables found in schemas: bronze_nba, bronze_ncaa, silver, gold."
+            return "No tables found in bronze DB (schemas: nba, ncaa)."
         # Group by schema.table
         by_table: dict[tuple[str, str], list[tuple[str, str]]] = defaultdict(list)
         for schema, table, col, dtype in out:

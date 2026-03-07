@@ -14,7 +14,7 @@ import logging
 import sys
 
 from load.modules import utils, warehouse
-from load.ncaa import fetch as ncaa_fetch
+from load.ncaa import load_ncaa_mbb_season
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ def main() -> int:
     try:
         for i, season in enumerate(seasons, 1):
             log.info("=== NCAA season %s (%d/%d) ===", season, i, len(seasons))
-            tables = ncaa_fetch.load_ncaa_mbb_season(
+            tables = load_ncaa_mbb_season(
                 season=season,
                 include_team_list=not args.skip_team_list,
                 include_games=not args.skip_games,

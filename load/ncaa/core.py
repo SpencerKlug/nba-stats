@@ -126,3 +126,8 @@ def parse_contest_ids_from_html(html: str) -> list[str]:
 def html_table_to_df(html: str, table_selector: str = "table") -> pd.DataFrame:
     """Parse first HTML table from page into a DataFrame."""
     return table_to_df(soup(html), table_selector)
+
+
+def academic_year_from_season(season: str) -> str:
+    """Map season year (e.g. 2026) to NCAA academic_year (same)."""
+    return str(int(season))

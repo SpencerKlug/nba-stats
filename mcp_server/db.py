@@ -8,8 +8,8 @@ from collections import defaultdict
 
 import duckdb
 
-# Allowed schemas (match dbt project: raw, staging, intermediate, marts)
-ALLOWED_SCHEMAS = frozenset({"raw", "staging", "intermediate", "marts"})
+# Medallion: bronze by source, silver by domain, gold aggregates
+ALLOWED_SCHEMAS = frozenset({"bronze_nba", "bronze_ncaa", "silver", "gold"})
 
 DEFAULT_ROW_LIMIT = 100
 
@@ -95,12 +95,12 @@ def list_tables_and_columns() -> str:
             """
             SELECT table_schema, table_name, column_name, data_type
             FROM information_schema.columns
-            WHERE table_schema IN ('raw','staging','intermediate','marts')
+            WHERE table_schema IN ('bronze_nba','bronze_ncaa','silver','gold')
             ORDER BY table_schema, table_name, ordinal_position
             """
         ).fetchall()
         if not out:
-            return "No tables found in schemas: raw, staging, intermediate, marts."
+            return "No tables found in schemas: bronze_nba, bronze_ncaa, silver, gold."
         # Group by schema.table
         by_table: dict[tuple[str, str], list[tuple[str, str]]] = defaultdict(list)
         for schema, table, col, dtype in out:

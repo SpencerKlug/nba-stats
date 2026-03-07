@@ -67,10 +67,14 @@ def main() -> int:
                     limit=args.limit,
                     skip_lineups=args.skip_lineups,
                 )
-                warehouse.write_duckdb_for_season(con, tables, season=season, season_type=args.season_type)
+                warehouse.write_duckdb_for_season(
+                    con, tables, season=season, source="nba", season_type=args.season_type
+                )
             else:
                 def on_flush(tables: dict) -> None:
-                    warehouse.write_duckdb_for_season(con, tables, season=season, season_type=args.season_type)
+                    warehouse.write_duckdb_for_season(
+                        con, tables, season=season, source="nba", season_type=args.season_type
+                    )
                 fetch.load_all_raw(
                     season=season,
                     season_type=args.season_type,

@@ -56,7 +56,7 @@ def main() -> int:
                 use_team_schedules=args.use_team_schedules,
                 limit=args.limit,
             )
-            warehouse.write_duckdb_for_season(con, tables, season=season, season_type=None)
+            warehouse.write_duckdb_for_season(con, tables, season=season, source="ncaa", season_type=None)
     finally:
         con.close()
         log.info("DuckDB connection closed")

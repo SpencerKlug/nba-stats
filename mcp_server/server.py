@@ -11,7 +11,7 @@ mcp = FastMCP(name="nba-stats-warehouse")
 
 @mcp.tool()
 def list_tables() -> str:
-    """List available tables and columns in the warehouse (schemas: raw, staging, intermediate, marts). Use this to discover what you can query before calling run_sql."""
+    """List available tables and columns in the warehouse (schemas: bronze_nba, bronze_ncaa, silver, gold). Use this to discover what you can query before calling run_sql."""
     return list_tables_and_columns()
 
 

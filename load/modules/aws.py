@@ -1,4 +1,4 @@
-"""AWS/S3 export: write raw DuckDB tables to S3 as Parquet."""
+"""AWS/S3 export: write bronze (raw) DuckDB tables to S3 as Parquet."""
 
 from __future__ import annotations
 
@@ -8,14 +8,19 @@ import duckdb
 
 log = logging.getLogger(__name__)
 
+BRONZE_SCHEMAS = ("bronze_nba", "bronze_ncaa")
+
 
 def export_to_s3(db_path: str, bucket: str, prefix: str) -> None:
-    """Export raw schema tables from DuckDB to S3 as Parquet (requires httpfs).
+    """Export bronze schema tables from DuckDB to S3 as Parquet (requires httpfs).
+
+    Each source (bronze_nba, bronze_ncaa) is exported under prefix/bronze_nba/
+    and prefix/bronze_ncaa/ with one Parquet file per table.
 
     Args:
-        db_path (str): Path to DuckDB file.
-        bucket (str): S3 bucket name.
-        prefix (str): S3 key prefix (e.g. nba).
+        db_path: Path to DuckDB file.
+        bucket: S3 bucket name.
+        prefix: S3 key prefix (e.g. nba or warehouse).
 
     Returns:
         None
@@ -24,12 +29,18 @@ def export_to_s3(db_path: str, bucket: str, prefix: str) -> None:
     con = duckdb.connect(str(db_path))
     con.execute("INSTALL httpfs; LOAD httpfs;")
     con.execute("SET s3_region = 'us-east-1';")
-    tables = con.execute(
-        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'raw'"
-    ).fetchall()
-    for (table_name,) in tables:
-        s3_path = f"s3://{bucket}/{prefix.rstrip('/')}/raw/{table_name}.parquet"
-        log.info("  %s -> %s", table_name, s3_path)
-        con.execute(f"COPY raw.{table_name} TO '{s3_path}' (FORMAT PARQUET)")
+    base = prefix.rstrip("/")
+    for schema in BRONZE_SCHEMAS:
+        tables = con.execute(
+            """
+            SELECT table_name FROM information_schema.tables
+            WHERE table_schema = ?
+            """,
+            [schema],
+        ).fetchall()
+        for (table_name,) in tables:
+            s3_path = f"s3://{bucket}/{base}/{schema}/{table_name}.parquet"
+            log.info("  %s.%s -> %s", schema, table_name, s3_path)
+            con.execute(f"COPY {schema}.{table_name} TO '{s3_path}' (FORMAT PARQUET)")
     con.close()
     log.info("S3 export complete")

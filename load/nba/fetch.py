@@ -9,7 +9,9 @@ from collections.abc import Callable
 import aiohttp
 import pandas as pd
 
-from load.models import (
+from load.modules import utils
+from load.nba import api
+from load.nba.models import (
     BoxScoreParams,
     CommonAllPlayersParams,
     CommonPlayerInfoParams,
@@ -19,7 +21,6 @@ from load.models import (
     ResultSet,
     ScoreboardParams,
 )
-from load.modules import api, utils
 
 log = logging.getLogger(__name__)
 
@@ -349,7 +350,7 @@ async def _load_all_raw_async(
     on_flush: Callable[[dict[str, pd.DataFrame]], None] | None = None,
 ) -> dict[str, pd.DataFrame]:
     """Orchestrate fetch: call small fetchers in order, pass deps explicitly."""
-    from load.modules import fetchers
+    from load.nba import fetchers
 
     season_label = utils.season_to_label(season)
     ctx = fetchers.FetchContext(
@@ -477,7 +478,7 @@ async def _load_one_dataset_async(
     skip_lineups: bool = False,
 ) -> dict[str, pd.DataFrame]:
     """Load a single dataset. Fetches dependencies on-the-fly when required."""
-    from load.modules import fetchers
+    from load.nba import fetchers
 
     season_label = utils.season_to_label(season)
     ctx = fetchers.FetchContext(

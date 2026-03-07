@@ -16,7 +16,8 @@ from typing import Any, Callable, Awaitable
 
 import pandas as pd
 
-from load.models import (
+from load.modules import utils
+from load.nba.models import (
     BoxScoreParams,
     CommonAllPlayersParams,
     CommonPlayoffSeriesParams,
@@ -33,7 +34,6 @@ from load.models import (
     ShotChartParams,
     TeamDashLineupsParams,
 )
-from load.modules import utils
 
 log = logging.getLogger(__name__)
 

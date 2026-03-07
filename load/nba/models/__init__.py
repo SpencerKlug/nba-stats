@@ -1,6 +1,6 @@
 """NBA API models: endpoint params, names, and constants."""
 
-from load.models.endpoints import (
+from load.nba.models.endpoints import (
     BoxScoreParams,
     CommonAllPlayersParams,
     CommonPlayoffSeriesParams,

@@ -10,7 +10,8 @@ import logging
 
 import pandas as pd
 
-from load.modules import ncaa_client, utils
+from load.modules import utils
+from load.ncaa import client as ncaa_client
 
 log = logging.getLogger(__name__)
 
@@ -25,16 +26,7 @@ def load_rankings(
     division: str = ncaa_client.DIVISION_I,
     sport_code: str = ncaa_client.SPORT_CODE_MBB,
 ) -> dict[str, pd.DataFrame]:
-    """Load rankings page and return all stat tables as DataFrames.
-
-    Args:
-        season: Season end year (e.g. 2026 for 2025-26).
-        division: NCAA division (default D-I).
-        sport_code: Sport code (default MBB).
-
-    Returns:
-        Dict of table name -> DataFrame (columns normalized, season added).
-    """
+    """Load rankings page and return all stat tables as DataFrames."""
     academic_year = _academic_year_from_season(season)
     log.info("Loading NCAA rankings season=%s division=%s sport=%s", season, division, sport_code)
     html = ncaa_client.get_rankings_page(
@@ -61,10 +53,7 @@ def load_team_list(
     division: str = ncaa_client.DIVISION_I,
     sport_code: str = ncaa_client.SPORT_CODE_MBB,
 ) -> pd.DataFrame:
-    """Load list of teams for the given season (D-I MBB).
-
-    Returns DataFrame with team name, link/href, and optionally org_id if parseable.
-    """
+    """Load list of teams for the given season (D-I MBB)."""
     academic_year = _academic_year_from_season(season)
     log.info("Loading NCAA team list season=%s", season)
     html = ncaa_client.get_team_list_page(
@@ -80,7 +69,6 @@ def load_team_list(
     df["season"] = season
     df["division"] = division
     df["sport_code"] = sport_code
-    # Extract org_id from href if present (e.g. org_id=580)
     if "team_href" in df.columns:
         df["org_id"] = df["team_href"].str.extract(r"org_id=(\d+)", expand=False)
     log.info("  team_list: %d rows", len(df))
@@ -92,16 +80,11 @@ def load_team_rankings_single_table(
     division: str = ncaa_client.DIVISION_I,
     sport_code: str = ncaa_client.SPORT_CODE_MBB,
 ) -> pd.DataFrame:
-    """Load the first/main rankings table from the rankings page as one DataFrame.
-
-    Convenience when you want a single table (e.g. team scoring offense).
-    """
+    """Load the first/main rankings table from the rankings page as one DataFrame."""
     tables = load_rankings(season=season, division=division, sport_code=sport_code)
     if not tables:
         return pd.DataFrame()
-    # Return first table; caller can choose by key if needed
-    first_key = next(iter(tables))
-    return tables[first_key]
+    return tables[next(iter(tables))]
 
 
 def load_game_list(
@@ -111,14 +94,9 @@ def load_game_list(
     use_team_schedules: bool = False,
     limit: int | None = None,
 ) -> tuple[pd.DataFrame, list[str]]:
-    """Load list of games (contest IDs) for the season.
-
-    Tries scoreboard first; if empty, falls back to iterating team schedules.
-    Returns (games_df with contest_id and metadata, list of contest_ids).
-    """
+    """Load list of games (contest IDs) for the season."""
     academic_year = _academic_year_from_season(season)
     log.info("Loading NCAA game list season=%s", season)
-
     contest_ids: list[str] = []
 
     if not use_team_schedules:
@@ -142,7 +120,6 @@ def load_game_list(
             log.info("  ncaa_schedule: %d games from scoreboard", len(contest_ids))
             return games_df if not games_df.empty else pd.DataFrame({"contest_id": contest_ids}), contest_ids
 
-    # Fallback: team schedules
     team_list = load_team_list(season=season, division=division)
     if team_list.empty or "org_id" not in team_list.columns:
         log.warning("Cannot load games: no team list or org_id")
@@ -172,9 +149,7 @@ def load_player_box_scores_and_schedule(
     season: str,
     limit: int | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load player-level box scores and game metadata. One fetch per game.
-    Returns (player_box_scores_df, schedule_df).
-    """
+    """Load player-level box scores and game metadata. One fetch per game."""
     if limit:
         contest_ids = contest_ids[: limit]
     log.info("Loading NCAA box scores and schedule for %d games", len(contest_ids))
@@ -219,21 +194,7 @@ def load_ncaa_mbb_season(
     use_team_schedules: bool = False,
     limit: int | None = None,
 ) -> dict[str, pd.DataFrame]:
-    """Load one season of NCAA men's basketball data into raw tables.
-
-    Args:
-        season: Season end year (e.g. 2026 for 2025-26).
-        division: NCAA division (default D-I).
-        include_team_list: Fetch team list.
-        include_rankings: Fetch rankings page tables.
-        include_games: Fetch game schedule.
-        include_box_scores: Fetch player-level box scores for each game.
-        use_team_schedules: Use team schedules instead of scoreboard for game list.
-        limit: Cap games/teams for testing.
-
-    Returns:
-        Dict of table_name -> DataFrame.
-    """
+    """Load one season of NCAA men's basketball data into raw tables."""
     result: dict[str, pd.DataFrame] = {}
 
     if include_team_list:
@@ -262,9 +223,7 @@ def load_ncaa_mbb_season(
                     result["ncaa_player_box_scores"] = box_df
                 if include_games and not schedule_from_box.empty:
                     result["ncaa_schedule"] = schedule_from_box
-            elif include_games:
-                # Games only (no box scores): use scoreboard/team-schedule data
-                if not games_df.empty:
-                    result["ncaa_schedule"] = games_df
+            elif include_games and not games_df.empty:
+                result["ncaa_schedule"] = games_df
 
     return result

@@ -1,7 +1,4 @@
-"""NBA stats.nba.com endpoint definitions: paths, result sets, and request params.
-
-All params serialize to dict[str, str] for the API. Use .to_api_dict() on each model.
-"""
+"""NBA stats.nba.com endpoint definitions: paths, result sets, and request params."""
 
 from __future__ import annotations
 
@@ -30,7 +27,7 @@ class Endpoint(str, Enum):
     COMMON_PLAYER_INFO = "commonplayerinfo"
 
 
-# --- Result set names (for parsing API response) ---
+# --- Result set names ---
 
 
 class ResultSet(str, Enum):
@@ -39,17 +36,9 @@ class ResultSet(str, Enum):
     GAME_HEADER = "GameHeader"
     GAME_SUMMARY = "GameSummary"
     COMMON_PLAYER_INFO = "CommonPlayerInfo"
-    # Index 0 used (no named result set): commonteamyears, drafthistory, commonplayoffseries,
-    # leaguedashlineups, teamdashlineups, box advanced/traditional, playbyplay, shotchart
-
-
-# --- Common constants ---
 
 
 LEAGUE_ID_NBA = "00"
-
-
-# --- Base for API params (all values become strings) ---
 
 
 # --- Param models ---
@@ -61,7 +50,7 @@ class LeagueGameLogParams(BaseModel):
     counter: str = "1000"
     direction: str = "DESC"
     league_id: str = Field(default=LEAGUE_ID_NBA, alias="LeagueID")
-    player_or_team: str = Field(..., alias="PlayerOrTeam")  # "T" or "P"
+    player_or_team: str = Field(..., alias="PlayerOrTeam")
     season: str = Field(..., alias="Season")
     season_type: str = Field(..., alias="SeasonType")
     sorter: str = Field(default="DATE", alias="Sorter")

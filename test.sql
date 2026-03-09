@@ -29,4 +29,4 @@ from main_marts.fact_player_per_game;
 ;
 
 select *
-from raw.ncaa_schedule;
+from ncaa.schedule;

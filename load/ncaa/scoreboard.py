@@ -90,26 +90,22 @@ def load_game_list(
                 contest_ids = contest_ids[:limit]
                 if not games_df.empty:
                     games_df = games_df.head(limit)
-            log.info("  ncaa_schedule: %d games from scoreboard", len(contest_ids))
+            log.info("  schedule: %d games from scoreboard", len(contest_ids))
             return (
-                games_df
-                if not games_df.empty
-                else pd.DataFrame({"contest_id": contest_ids})
+                games_df if not games_df.empty else pd.DataFrame({"contest_id": contest_ids})
             ), contest_ids
 
     teams = ncaa_team_list.load_team_list(season=season, division=division)
-    if teams.empty or "org_id" not in teams.columns:
-        log.warning("Cannot load games: no team list or org_id")
+    if teams.empty or "team_id" not in teams.columns:
+        log.warning("Cannot load games: no team list or team_id")
         return pd.DataFrame(), []
 
-    org_ids = teams["org_id"].dropna().unique().tolist()
+    org_ids = teams["team_id"].dropna().unique().tolist()
     if limit:
         org_ids = org_ids[: max(1, limit // 50)]
     seen: set[str] = set()
     for i, org_id in enumerate(org_ids):
-        html = team_season.get_team_schedule_page(
-            org_id=str(org_id), sport_code=sport_code
-        )
+        html = team_season.get_team_schedule_page(org_id=str(org_id), sport_code=sport_code)
         for cid in team_season.parse_schedule_contest_ids(html):
             if cid not in seen:
                 seen.add(cid)
@@ -123,7 +119,7 @@ def load_game_list(
             )
     if limit:
         contest_ids = contest_ids[:limit]
-    log.info("  ncaa_schedule: %d games from team schedules", len(contest_ids))
+    log.info("  schedule: %d games from team schedules", len(contest_ids))
     games_df = pd.DataFrame(
         {
             "contest_id": contest_ids,

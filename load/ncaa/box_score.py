@@ -139,7 +139,7 @@ def load_player_box_scores_and_schedule(
         else pd.DataFrame()
     )
     log.info(
-        "  ncaa_player_box_scores: %d rows, ncaa_schedule: %d games",
+        "  player_box_scores: %d rows, schedule: %d games",
         len(player_df),
         len(schedule_df),
     )

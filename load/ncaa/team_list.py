@@ -6,7 +6,6 @@ import logging
 
 import pandas as pd
 
-from load.modules import utils
 from load.ncaa.core import (
     DIVISION_I,
     SPORT_CODE_MBB,
@@ -63,11 +62,20 @@ def load_team_list(
     if df.empty:
         log.warning("No teams parsed from team list page")
         return df
-    df = utils.normalize_columns(df)
-    df["season"] = season
-    df["division"] = division
-    df["sport_code"] = sport_code
-    if "team_href" in df.columns:
-        df["org_id"] = df["team_href"].str.extract(r"org_id=(\d+)", expand=False)
-    log.info("  team_list: %d rows", len(df))
-    return df
+    # Bronze teams table: college, team_id (unique id from HTML), link
+    college = df["team_name"] if "team_name" in df.columns else df.iloc[:, 0]
+    link = (
+        df["team_href"]
+        if "team_href" in df.columns
+        else (df.iloc[:, 1] if df.shape[1] > 1 else pd.Series([""] * len(df)))
+    )
+    # Unique id from href: org_id=123 or /team/123
+    if hasattr(link, "str"):
+        id_from_org = link.str.extract(r"org_id=(\d+)", expand=False)
+        id_from_path = link.str.extract(r"/team/(\d+)", expand=False)
+        team_id = id_from_org.fillna(id_from_path)
+    else:
+        team_id = pd.Series(dtype=object)
+    out = pd.DataFrame({"college": college, "team_id": team_id, "link": link})
+    log.info("  teams: %d rows", len(out))
+    return out

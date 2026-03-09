@@ -99,7 +99,7 @@ def upsert_bronze_table(
     Args:
         con: DuckDB connection (to bronze.duckdb).
         source: 'nba' or 'ncaa'; data is written to schema nba or ncaa.
-        table_name: Table name (e.g. team_game_logs, ncaa_team_list).
+        table_name: Table name (e.g. team_game_logs, teams).
         df: Data to write.
         season: Season year (e.g. 2026).
         season_type: NBA API season type (e.g. Regular Season). None for NCAA.
@@ -109,6 +109,15 @@ def upsert_bronze_table(
         return
 
     fq_table = f"{source}.{table_name}"
+    # ncaa.teams has no season; full replace each load
+    if source == "ncaa" and table_name == "teams":
+        con.register("_df", df)
+        con.execute(f"DROP TABLE IF EXISTS {fq_table}")
+        con.execute(f"CREATE TABLE {fq_table} AS SELECT * FROM _df")
+        con.unregister("_df")
+        log.info("  replaced %s: %d rows", fq_table, len(df))
+        return
+
     if not table_exists(con, source, table_name):
         con.register("_df", df)
         con.execute(f"CREATE TABLE {fq_table} AS SELECT * FROM _df")
@@ -146,7 +155,7 @@ def write_duckdb_for_season(
 
     Args:
         con: DuckDB connection (bronze.duckdb).
-        tables: Raw tables keyed by name (e.g. team_game_logs, ncaa_team_list).
+        tables: Raw tables keyed by name (e.g. team_game_logs, teams).
         season: Season year (e.g. 2026).
         source: 'nba' or 'ncaa'; data is written to that schema in the bronze DB.
         season_type: NBA API season type. Pass None for NCAA.

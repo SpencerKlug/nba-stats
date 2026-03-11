@@ -25,6 +25,6 @@ def get_team_page(session: requests.Session, team_id: str, academic_year: str) -
         "sport_code": sport_code,
         "academic_year": academic_year,
     }
-    response = session.get(url, params=params)
+    response = session.get(url, params=params, headers=NCAA_HEADERS)
     soup = BeautifulSoup(response.content, "lxml")
     return soup

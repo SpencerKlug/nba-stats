@@ -8,6 +8,7 @@ from team_page import get_team_page
 
 
 def initial_load():
+    """Iniitla backfill of contest IDs for all teams and academic years."""
     start_date = datetime.date(2000, 1, 1)
     end_date = datetime.date(2026, 1, 1)
     year_list = list(range(start_date.year, end_date.year + 1))

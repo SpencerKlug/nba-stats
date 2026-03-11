@@ -1,20 +1,22 @@
 """Get the schedules/games for each team in the NCAA."""
 
-from constants import NCAA_BASE, NCAA_HEADERS, division, sport_code
+from collections.abc import Callable
+
 from bs4 import BeautifulSoup
-import requests
+
+from constants import NCAA_BASE, division, sport_code
 
 team_id = "590640"  # Gonzaga
 academic_year = "2023"
 
 
-def get_team_page(session: requests.Session, team_id: str, academic_year: str) -> BeautifulSoup:
+def get_team_page(get_html: Callable[[str, dict], str], team_id: str, academic_year: str) -> BeautifulSoup:
     """This returns the page for a given team for a given academic year.
 
     Args:
-        session (requests.Session): The session to use to make the request.
-        team_id (str): The team ID to get the page for.
-        academic_year (str): The academic year to get the page for.
+        get_html: Fetcher function (url, params) -> html string. Use fetch.ncaa_session().
+        team_id: The team ID to get the page for.
+        academic_year: The academic year to get the page for.
 
     Returns:
         BeautifulSoup: The BeautifulSoup object for the page.
@@ -25,6 +27,5 @@ def get_team_page(session: requests.Session, team_id: str, academic_year: str) -
         "sport_code": sport_code,
         "academic_year": academic_year,
     }
-    response = session.get(url, params=params, headers=NCAA_HEADERS)
-    soup = BeautifulSoup(response.content, "lxml")
-    return soup
+    html = get_html(url, params)
+    return BeautifulSoup(html, "lxml")

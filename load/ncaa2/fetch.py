@@ -43,10 +43,10 @@ def ncaa_session(*, headless: bool = True):
 
         # Visit homepage first to establish session/cookies (mimics real user flow)
         page.goto(f"{NCAA_BASE}/", wait_until="networkidle", timeout=30000)
-        time.sleep(REQUEST_DELAY_SECONDS)
+        # time.sleep(REQUEST_DELAY_SECONDS)
 
         def get_html(url: str, params: dict | None = None) -> str:
-            time.sleep(REQUEST_DELAY_SECONDS)
+            # time.sleep(REQUEST_DELAY_SECONDS)
             full_url = url
             if params:
                 full_url = f"{url}?{urlencode(params)}"

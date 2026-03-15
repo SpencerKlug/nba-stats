@@ -3,14 +3,15 @@
 from collections.abc import Callable
 
 from bs4 import BeautifulSoup
-
 from constants import NCAA_BASE, division, sport_code
 
 team_id = "590640"  # Gonzaga
 academic_year = "2023"
 
 
-def get_team_page(get_html: Callable[[str, dict], str], team_id: str, academic_year: str) -> BeautifulSoup:
+def get_team_page(
+    get_html: Callable[[str, dict], str], team_id: str, academic_year: str
+) -> BeautifulSoup:
     """This returns the page for a given team for a given academic year.
 
     Args:
